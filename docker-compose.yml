@@ -1,0 +1,30 @@
+# Docker Compose configuration cho CodeFit Backend
+# File nay dinh nghia cac dich vu container can thiet cho ung dung
+
+version: "3.8"
+
+services:
+  # MySQL - Database chinh cua ung dung
+  mysql:
+    image: mysql:8                    # Su dung MySQL version 8
+    container_name: codefit_mysql      # Ten container de quan ly de dang hon
+    environment:
+      MYSQL_ROOT_PASSWORD: root        # Mat khau root cho MySQL
+      MYSQL_DATABASE: codefit          # Ten database se duoc tao tu dong khi container khoi dong
+    ports:
+      - "3307:3306"                    # Map port 3307 ben host sang port 3306 ben trong container
+
+  # Redis - Cache server cho ung dung
+  redis:
+    image: redis:7                    # Su dung Redis version 7
+    container_name: codefit_redis      # Ten container
+    ports:
+      - "6379:6379"                    # Map port Redis (6379)
+
+  # RabbitMQ - Message broker cho hieu ung hoa giao tiep giua cac service
+  rabbitmq:
+    image: rabbitmq:3-management       # RabbitMQ voi giao dien quan ly web tich hop
+    container_name: codefit_rabbitmq   # Ten container
+    ports:
+      - "5672:5672"                    # Port cho AMQP protocol (giai trien)
+      - "15672:15672"                  # Port cho RabbitMQ Management UI (truy cap tai http://localhost:15672)

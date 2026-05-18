@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `progress` ADD COLUMN `percentage` INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN `totalLessons` INTEGER NOT NULL DEFAULT 0;

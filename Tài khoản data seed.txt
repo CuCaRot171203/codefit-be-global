@@ -1,0 +1,23 @@
+Role	Email	Mật khẩu
+
+1.
+Admin
+admin@codefit.com
+admin123
+
+
+2. Lecture
+thanh.nguyen@codefit.com
+password123
+
+2.1. Lecture
+linh.tran@codefit.com
+password123
+
+
+3.User
+john@example.com
+password123
+3.1. User
+jane@example.com
+password123

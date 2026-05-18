@@ -1,0 +1,8 @@
+/**
+ * Leaderboard Routes
+ *
+ * Định nghĩa các API routes cho Leaderboard module.
+ */
+declare const router: import("express-serve-static-core").Router;
+export default router;
+//# sourceMappingURL=leaderboard.routes.d.ts.map

@@ -1,0 +1,718 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ROLE DOMAIN ============
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique  // user, admin, lecture
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+
+  @@map("roles")
+}
+
+// ============ LESSON REQUEST DOMAIN ============
+enum LessonRequestStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  CANCELLED
+}
+
+model LessonRequest {
+  id        String   @id @default(uuid())
+  lessonId  String
+  lectureId String
+  status    LessonRequestStatus @default(PENDING)
+  dueDate   DateTime?
+  notes     String?  @db.LongText
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lesson  Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lecture User   @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  @@index([lectureId])
+  @@index([lessonId])
+  @@index([status])
+}
+
+// ============ LESSON CONTENT DOMAIN ============
+enum LessonStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PUBLISHED
+  ARCHIVED
+}
+
+model LessonContent {
+  id          String   @id @default(uuid())
+  lessonId    String   @unique
+  content     String?  @db.LongText  // Rich text content for the lesson
+  testCases   String?  @db.LongText  // JSON array of test cases
+  hints       String?  @db.LongText   // JSON array of hints
+  timeLimit   Int?                      // Time limit in seconds
+  memoryLimit Int?                      // Memory limit in MB
+  starterCode String?  @db.LongText    // Starter code for users
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+}
+
+model LessonReview {
+  id         String       @id @default(uuid())
+  lessonId   String       @unique
+  adminId    String
+  status     LessonStatus @default(PENDING_REVIEW)
+  feedback   String?      @db.LongText
+  reviewedAt DateTime     @default(now())
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  admin  User   @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([status])
+}
+
+// ============ SCORING CONFIG DOMAIN ============
+model ScoringConfig {
+  id             String @id @default(uuid())
+  lessonId       String @unique
+  baseScore      Int    @default(100)
+  penaltyPerHint Int    @default(10)
+  timeBonusEnabled Boolean @default(false)
+  timeBonusThreshold Int?  // in seconds
+  timeBonusValue Int?      // bonus points
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+}
+
+// ============ LESSON SUBMISSION DOMAIN ============
+model LessonSubmission {
+  id          String   @id @default(uuid())
+  lessonId    String
+  userId      String
+  code        String   @db.LongText
+  language    String   @default("javascript")
+  score       Int?
+  passedTests Int?
+  totalTests  Int?
+  hintsUsed   Int      @default(0)
+  timeUsed    Int?     // in seconds
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  result      String?  @db.LongText // JSON detailed test results
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  createdAt   DateTime @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+  @@index([userId])
+  @@index([status])
+}
+
+// ============ USER DOMAIN ============
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String
+  password  String
+  roleId    String
+  avatar    String?
+  bio       String?
+  fullName  String?
+  phone     String?
+  school    String?
+  learningLevel String? // beginner, intermediate, advanced
+  referralCode String?
+  isOnboarded Boolean @default(false) // Track if user has completed onboarding
+  isActive   Boolean @default(true)  // Track if user is active or deactivated
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  role                  Role                @relation(fields: [roleId], references: [id])
+  sessions             UserSession[]
+  enrollments          Enrollment[]
+  submissions          Submission[]
+  progress             Progress[]
+  lessonProgress       LessonProgress[]
+  minitestSubmissions  MinitestSubmission[]
+  hackathonParticipations HackathonParticipant[]
+  hackathonSubmissions HackathonSubmission[]
+  projectSubmissions   ProjectSubmission[]
+  certificates         Certificate[]
+  userStats            UserStats[]
+  feedback             Feedback[]
+  notifications        Notification[]
+  aiRequests           AIRequest[]
+  conversations        Conversation[]
+  createdCourses       Course[]         @relation("CourseCreator")
+  enrollmentsAsCoach   Enrollment[]     @relation("EnrollmentCoach")
+  lectureCourses       LectureCourse[]
+  lessonRequests       LessonRequest[]
+  lessonReviews        LessonReview[]
+  lessonSubmissions    LessonSubmission[]
+  payments             Payment[]
+  usedActivateCodes    ActivateCode[]   @relation("ActivateCodeUser")
+  subscriptions        CourseSubscription[]
+
+  @@index([roleId])
+}
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String
+  expiredAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ============ SUBSCRIPTION TYPE ============
+enum SubscriptionType {
+  FREE
+  PREMIUM
+  BOTH
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+}
+
+enum CodeType {
+  ADMIN_CREATED
+  BULK_GENERATED
+}
+
+// ============ COURSE DOMAIN ============
+model Course {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  price       Float    @default(0)
+  originalPrice Float? @default(0)
+  image       String?
+  duration    String?
+  level       String   // beginner, intermediate, advanced
+  creatorId   String?
+  subscriptionType SubscriptionType @default(FREE)
+  subscriptionPrice Float?
+  autoEnrollOnApproval Boolean @default(true)
+  // Progressive unlock config
+  unlockLessonsCount Int @default(3)  // Số bài mở khóa mỗi lượt (0 = không giới hạn)
+  unlockByPhase     Boolean @default(false)  // true = unlock theo phase, false = unlock theo số bài
+  // Course metadata managed by admin
+  features String?  @db.LongText  // JSON array of { title, description, bgColor, textColor }
+  includes String? @db.LongText  // JSON array of { icon, text }
+  createdAt   DateTime @default(now())
+
+  creator      User?        @relation("CourseCreator", fields: [creatorId], references: [id])
+  enrollments  Enrollment[]
+  phases       Phase[]
+  progress     Progress[]
+  certificates Certificate[]
+  projects     Project[]
+  payments     Payment[]
+  activateCodes ActivateCode[]
+  lectureCourses LectureCourse[]
+  subscriptions CourseSubscription[]
+  hackathons   Hackathon[]
+}
+
+// ============ LECTURE-COURSE ASSIGNMENT ============
+model LectureCourse {
+  id          String   @id @default(uuid())
+  lectureId   String
+  courseId    String
+  assignedAt  DateTime @default(now())
+  assignedBy  String?  // Admin who assigned
+
+  lecture   User   @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([lectureId, courseId])
+  @@index([lectureId])
+  @@index([courseId])
+}
+
+// ============ COURSE SUBSCRIPTION DOMAIN ============
+model CourseSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  courseId  String
+  status    SubscriptionStatus @default(ACTIVE)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+  @@index([status])
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  userId        String
+  courseId      String
+  amount        Float
+  paymentMethod String   // qr, direct
+  paymentStatus String   @default("pending") // pending, completed, failed, cancelled
+  payosOrderId  String?
+  payosTransactionId String?
+  qrCodeUrl     String?
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([payosOrderId])
+}
+
+model ActivateCode {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  courseId    String
+  type        CodeType  @default(ADMIN_CREATED)
+  createdBy   String?
+  usedBy      String?
+  usedAt      DateTime?
+  isUsed      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+
+  course Course @relation(fields: [courseId], references: [id])
+  user   User?  @relation("ActivateCodeUser", fields: [usedBy], references: [id])
+
+  @@index([code])
+  @@index([courseId])
+  @@index([usedBy])
+}
+
+model Enrollment {
+  id        String   @id @default(uuid())
+  userId    String
+  courseId  String
+  progress  Float    @default(0)
+  coachId   String?
+  paymentId String?
+  // Progressive unlock tracking
+  completedLessons  Int      @default(0)  // Số bài đã hoàn thành
+  currentUnlocks   Int      @default(0)  // Số bài đã được mở khóa
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  coach  User?  @relation("EnrollmentCoach", fields: [coachId], references: [id])
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+  @@index([coachId])
+}
+
+model Phase {
+  id        String @id @default(uuid())
+  courseId  String
+  title     String
+  orderIndex Int
+
+  course    Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons   Lesson[]
+  minitests Minitest[]
+}
+
+model Lesson {
+  id        String @id @default(uuid())
+  phaseId   String
+  title     String
+  content   String @db.LongText
+  type      String // video, code
+  orderIndex Int
+  status    LessonStatus @default(DRAFT)
+  isPublished Boolean @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  phase           Phase             @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  lessonProgress  LessonProgress[]
+  lessonContent   LessonContent?
+  lessonRequest   LessonRequest[]
+  lessonReview    LessonReview?
+  scoringConfig   ScoringConfig?
+  lessonSubmissions LessonSubmission[]
+}
+
+// ============ PROBLEM DOMAIN ============
+model Problem {
+  id           String @id @default(uuid())
+  title        String
+  description  String @db.LongText
+  difficulty   String @default("MEDIUM") // EASY, MEDIUM, HARD
+  timeLimit    Int    @default(1000) // ms
+  memoryLimit  Int    @default(256)  // MB
+  codeTemplate String? @db.LongText  // Starter code template
+  inputFormat  String? @db.LongText // Format description for input
+  outputFormat String? @db.LongText // Format description for output
+  hackathonId  String?
+  minitestId   String?
+
+  hackathon           Hackathon?        @relation(fields: [hackathonId], references: [id], onDelete: Cascade)
+  testcases           Testcase[]
+  submissions         Submission[]
+  minitestQuestions   MinitestQuestion[]
+  hackathonSubmissions HackathonSubmission[]
+}
+
+model Testcase {
+  id              String  @id @default(uuid())
+  problemId       String
+  input           String  @db.LongText
+  expectedOutput  String  @db.LongText
+  isPublic        Boolean @default(false)
+
+  problem          Problem             @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  submissionResults SubmissionResult[]
+}
+
+// ============ SUBMISSION DOMAIN ============
+model Submission {
+  id        String   @id @default(uuid())
+  userId    String
+  problemId String
+  code      String   @db.LongText
+  language  String
+  status    String   @default("PENDING") // PENDING, RUNNING, AC, WA, RE, CE, TLE, MLE
+  runtime   Int?
+  memory    Int?
+  createdAt DateTime @default(now())
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem        Problem             @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  results        SubmissionResult[]
+
+  @@index([userId])
+  @@index([problemId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SubmissionResult {
+  id           String @id @default(uuid())
+  submissionId String
+  testcaseId   String
+  status       String // AC, WA, RE, TLE, MLE
+  runtime      Int?
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  testcase   Testcase   @relation(fields: [testcaseId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([testcaseId])
+}
+
+// ============ PROGRESS DOMAIN ============
+model Progress {
+  id               String @id @default(uuid())
+  userId           String
+  courseId         String
+  score            Float  @default(0)
+  completedLessons Int    @default(0)
+  totalLessons     Int    @default(0)
+  percentage       Int    @default(0)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+}
+
+model LessonProgress {
+  id          String    @id @default(uuid())
+  userId      String
+  lessonId    String
+  courseId    String?
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+}
+
+// ============ MINITEST DOMAIN ============
+model Minitest {
+  id        String @id @default(uuid())
+  phaseId   String
+  title     String
+  orderIndex Int @default(0)
+
+  phase     Phase               @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  questions MinitestQuestion[]
+  submissions MinitestSubmission[]
+}
+
+model MinitestQuestion {
+  id         String @id @default(uuid())
+  minitestId String
+  problemId  String
+
+  minitest Minitest @relation(fields: [minitestId], references: [id], onDelete: Cascade)
+  problem  Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([minitestId])
+  @@index([problemId])
+}
+
+model MinitestSubmission {
+  id         String   @id @default(uuid())
+  userId     String
+  minitestId String
+  score      Float
+  result     String?  @db.LongText  // JSON string containing test results
+  createdAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  minitest Minitest @relation(fields: [minitestId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([minitestId])
+}
+
+// ============ HACKATHON DOMAIN ============
+model Hackathon {
+  id               String   @id @default(uuid())
+  courseId         String?
+  lessonId         String?
+  title            String
+  description      String   @db.LongText
+  startTime        DateTime
+  endTime          DateTime
+  durationMinutes  Int      @default(120)
+  maxParticipants  Int      @default(100)
+  imageUrl         String?
+  lessonIds        String?  @db.LongText // JSON array of lesson IDs
+
+  course       Course?               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  participants HackathonParticipant[]
+  submissions  HackathonSubmission[]
+  problems     Problem[]
+}
+
+model HackathonParticipant {
+  id          String @id @default(uuid())
+  userId      String
+  hackathonId String
+  joinedAt    DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hackathon Hackathon @relation(fields: [hackathonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, hackathonId])
+  @@index([userId])
+  @@index([hackathonId])
+}
+
+model HackathonSubmission {
+  id          String @id @default(uuid())
+  userId      String
+  hackathonId String
+  problemId   String
+  score       Float
+  submittedAt DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hackathon Hackathon @relation(fields: [hackathonId], references: [id], onDelete: Cascade)
+  problem   Problem   @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([hackathonId])
+  @@index([problemId])
+}
+
+// ============ PROJECT DOMAIN ============
+model Project {
+  id          String @id @default(uuid())
+  courseId    String
+  title       String
+  description String @db.LongText
+  imageUrl    String? @db.LongText
+  fileUrl     String? @db.LongText
+
+  course      Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  submissions ProjectSubmission[]
+}
+
+model ProjectSubmission {
+  id        String   @id @default(uuid())
+  userId    String
+  projectId String
+  fileUrl   String
+  status    String   @default("pending") // pending, approved, rejected
+  reviewNote String?
+  submittedAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([projectId])
+}
+
+// ============ CERTIFICATE DOMAIN ============
+model Certificate {
+  id             String   @id @default(uuid())
+  userId         String
+  courseId       String
+  courseTitle    String   @default("Khóa học")
+  userName       String   @default("Học viên")
+  issuedAt       DateTime @default(now())
+  certificateUrl String?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+}
+
+// ============ STATS DOMAIN ============
+model UserStats {
+  id            String    @id @default(uuid())
+  userId        String
+  score         Float     @default(0)
+  frequency     Int       @default(0)
+  rank          Int?
+  weeklyScore   Float     @default(0)
+  lastWeekScore Float     @default(0)
+  lastUpdated   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+  @@index([userId])
+  @@index([rank])
+}
+
+// ============ FEEDBACK DOMAIN ============
+model Feedback {
+  id        String   @id @default(uuid())
+  userId    String
+  message   String   @db.LongText
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============ NOTIFICATION DOMAIN ============
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // submission, hackathon, system
+  title     String
+  content   String   @db.LongText
+  metadata  String?  @db.LongText // JSON string for additional data like link, courseId
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targets NotificationTarget[]
+
+  @@index([userId])
+  @@index([type])
+  @@index([isRead])
+}
+
+model NotificationTarget {
+  id             String @id @default(uuid())
+  notificationId String
+  targetType     String // user, course, hackathon
+  targetId       String
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([targetType, targetId])
+}
+
+// ============ AI CONVERSATION DOMAIN ============
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String   @default("Cuộc trò chuyện mới")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ConversationMessage[]
+
+  @@index([userId])
+}
+
+model ConversationMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String   // 'user' | 'assistant'
+  content        String   @db.LongText
+  suggestions    String?  @db.LongText  // JSON array stored as string
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+// ============ AI DOMAIN ============
+model AIRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  prompt    String   @db.LongText
+  response  String?  @db.LongText
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
