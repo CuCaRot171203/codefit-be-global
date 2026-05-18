@@ -582,6 +582,44 @@ class StatsRepository {
       include: { problem: true }
     });
 
+    const hasLessonSubs = lessonSubs.length > 0;
+    const hasProblemSubs = problemSubs.length > 0;
+    const hasAnySubmission = hasLessonSubs || hasProblemSubs;
+
+    // Active days
+    const activeDays = await prisma.userSession.findMany({
+      where: {
+        userId,
+        expiredAt: { gte: sevenDaysAgo }
+      },
+      select: { expiredAt: true }
+    });
+    const uniqueDays = new Set(
+      activeDays.map(s => s.expiredAt.toISOString().split('T')[0])
+    );
+    const hasActiveDays = uniqueDays.size > 0;
+
+    // Enrollment / progress
+    const enrollments = await prisma.enrollment.findMany({ where: { userId } });
+    const progress = await prisma.progress.findMany({ where: { userId } });
+    const hasEnrollments = enrollments.length > 0;
+
+    // Build hasActivity: true only when user has made submissions or enrolled
+    const hasActivity = hasAnySubmission || hasEnrollments;
+
+    // --- Return 0 scores for new users with no activity yet ---
+    if (!hasActivity) {
+      return {
+        hasActivity: false,
+        algorithmSpeed: { score: 0, label: 'Tốc độ hiểu thuật toán' },
+        logicThinking: { score: 0, label: 'Khả năng tư duy logic' },
+        bugFixing: { score: 0, label: 'Khả năng fix bug' },
+        learningFrequency: { score: 0, label: 'Tần suất học', level: 'low' },
+        taskCompletion: { score: 0, label: 'Mức độ hoàn thành' },
+        finalScore: 0
+      };
+    }
+
     let speedScore = 0;
     let speedDataPoints = 0;
 
@@ -605,10 +643,10 @@ class StatsRepository {
       }
     }
 
-    const algorithmSpeed = speedDataPoints > 0 ? Math.round(speedScore / speedDataPoints) : 50;
+    const algorithmSpeed = speedDataPoints > 0 ? Math.round(speedScore / speedDataPoints) : 0;
 
     // --- 2. Logic Thinking (weight 0.25) ---
-    const lessonPassRate = lessonSubs.length > 0
+    const lessonPassRate = hasLessonSubs
       ? lessonSubs.reduce((sum, s) => sum + ((s.passedTests || 0) / Math.max(s.totalTests || 1, 1)), 0) / lessonSubs.length
       : 0;
 
@@ -674,8 +712,8 @@ class StatsRepository {
       }
     }
 
-    const fixedRate = totalMultiAttempt > 0 ? fixedCount / totalMultiAttempt : 1;
-    const errorDecrease = totalMultiAttempt > 0 ? totalErrorDecrease / totalMultiAttempt : 1;
+    const fixedRate = totalMultiAttempt > 0 ? fixedCount / totalMultiAttempt : 0;
+    const errorDecrease = totalMultiAttempt > 0 ? totalErrorDecrease / totalMultiAttempt : 0;
 
     const bugFixing = Math.round(
       fixedRate * 40 +
@@ -684,17 +722,6 @@ class StatsRepository {
     );
 
     // --- 4. Learning Frequency (weight 0.20) ---
-    const activeDays = await prisma.userSession.findMany({
-      where: {
-        userId,
-        expiredAt: { gte: sevenDaysAgo }
-      },
-      select: { expiredAt: true }
-    });
-
-    const uniqueDays = new Set(
-      activeDays.map(s => s.expiredAt.toISOString().split('T')[0])
-    );
     const activeDaysPerWeek = uniqueDays.size;
     const frequencyScore = Math.round((activeDaysPerWeek / 7) * 100);
 
@@ -705,14 +732,6 @@ class StatsRepository {
     const learningFrequency = frequencyScore;
 
     // --- 5. Task Completion (weight 0.20) ---
-    const progress = await prisma.progress.findMany({
-      where: { userId }
-    });
-
-    const enrollments = await prisma.enrollment.findMany({
-      where: { userId }
-    });
-
     const totalLessons = progress.reduce((sum, p) => sum + (p.totalLessons || 0), 0);
     const completedLessons = progress.reduce((sum, p) => sum + (p.completedLessons || 0), 0);
     const lessonCompletion = totalLessons > 0 ? completedLessons / totalLessons : 0;
@@ -734,6 +753,7 @@ class StatsRepository {
     );
 
     return {
+      hasActivity: true,
       algorithmSpeed: { score: algorithmSpeed, label: 'Tốc độ hiểu thuật toán' },
       logicThinking: { score: logicThinking, label: 'Khả năng tư duy logic' },
       bugFixing: { score: bugFixing, label: 'Khả năng fix bug' },
