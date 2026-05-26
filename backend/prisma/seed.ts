@@ -412,7 +412,7 @@ async function main() {
     data: {
       title: 'Two Sum',
       description: 'Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.',
-      difficulty: 'easy',
+      difficulty: 'EASY',
       timeLimit: 1000,
       memoryLimit: 256,
     },
@@ -422,7 +422,7 @@ async function main() {
     data: {
       title: 'Reverse String',
       description: 'Write a function that reverses a string. The input string is given as an array of characters.',
-      difficulty: 'easy',
+      difficulty: 'EASY',
       timeLimit: 1000,
       memoryLimit: 256,
     },
@@ -432,7 +432,7 @@ async function main() {
     data: {
       title: 'Valid Parentheses',
       description: 'Given a string s containing just the characters \'(\', \')\', \'{\', \'}\', \'[\' and \']\', determine if the input string is valid.',
-      difficulty: 'medium',
+      difficulty: 'MEDIUM',
       timeLimit: 2000,
       memoryLimit: 256,
     },
@@ -442,7 +442,7 @@ async function main() {
     data: {
       title: 'Merge Two Sorted Lists',
       description: 'Merge two sorted linked lists and return it as a sorted list.',
-      difficulty: 'medium',
+      difficulty: 'MEDIUM',
       timeLimit: 2000,
       memoryLimit: 512,
     },
@@ -452,7 +452,7 @@ async function main() {
     data: {
       title: 'Binary Tree Inorder Traversal',
       description: 'Given the root of a binary tree, return the inorder traversal of its nodes values.',
-      difficulty: 'hard',
+      difficulty: 'HARD',
       timeLimit: 3000,
       memoryLimit: 512,
     },
@@ -611,7 +611,6 @@ async function main() {
     data: {
       phaseId: phase1.id,
       title: 'Quiz 1 - JavaScript Basics',
-      orderIndex: 0,
     },
   });
 

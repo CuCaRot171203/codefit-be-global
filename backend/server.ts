@@ -82,6 +82,15 @@ app.get('/', (req: Request, res: Response) => {
   res.send('CodeFit API running');
 });
 
+app.get('/api/health', async (req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'error', timestamp: new Date().toISOString() });
+  }
+});
+
 // Test email route
 app.post('/api/test-email', async (req: Request, res: Response) => {
   const { to, userName, courseTitle, lessonTitle } = req.body;

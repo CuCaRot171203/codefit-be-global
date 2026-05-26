@@ -754,27 +754,19 @@ class AdminRepository {
         minitestQuestions: {
           some: {
             minitest: {
-              phase: {
-                courseId
-              }
+              phase: { courseId }
             }
           }
         }
       },
       include: {
         testcases: true,
-        _count: {
-          select: {
-            testcases: true
-          }
-        },
+        _count: { select: { testcases: true } },
         minitestQuestions: {
           include: {
             minitest: {
               include: {
-                phase: {
-                  select: { id: true, title: true, courseId: true }
-                }
+                phase: { select: { id: true, title: true, courseId: true } }
               }
             }
           }

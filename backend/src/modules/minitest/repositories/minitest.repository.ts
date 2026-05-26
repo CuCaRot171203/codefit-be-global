@@ -64,11 +64,22 @@ class MinitestRepository extends BaseRepository<Minitest> {
    * @returns Promise<Minitest[]> - Danh sách bài test của khóa học
    */
   async findByCourseId(courseId: string): Promise<Minitest[]> {
-    // Bước 1: Tìm các bài test có courseId tương ứng
-    // Bước 2: Sắp xếp theo orderIndex tăng dần
-    return this.model.findMany({
+    const phases = await prisma.phase.findMany({
       where: { courseId },
-      orderBy: { orderIndex: 'asc' }
+      select: { id: true },
+    });
+    const phaseIds = phases.map(p => p.id);
+
+    return this.model.findMany({
+      where: { phaseId: { in: phaseIds } },
+      include: {
+        phase: { select: { id: true, title: true, orderIndex: true } },
+        questions: { include: { problem: true } },
+      },
+      orderBy: [
+        { phase: { orderIndex: 'asc' } },
+        { orderIndex: 'asc' }
+      ]
     });
   }
 }

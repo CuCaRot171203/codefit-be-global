@@ -870,8 +870,86 @@ async function main() {
   console.log('Tao submissions');
 
   // ============ MINITEST ============
+
+  // --- Python-specific problems (for Course 3: Python for Data Science) ---
+  const pyProblem1 = await prisma.problem.create({
+    data: {
+      title: 'Python Two Sum',
+      description: 'Cho mot list cac so nguyen va mot so nguyen target, tra ve chi so cua hai so sao cho tong cua chung bang target. (Python version)',
+      difficulty: 'EASY',
+      timeLimit: 1000,
+      memoryLimit: 256,
+    },
+  });
+
+  const pyProblem2 = await prisma.problem.create({
+    data: {
+      title: 'Python Reverse String',
+      description: 'Viet ham dao nguoc mot string trong Python.',
+      difficulty: 'EASY',
+      timeLimit: 1000,
+      memoryLimit: 256,
+    },
+  });
+
+  const pyProblem3 = await prisma.problem.create({
+    data: {
+      title: 'Python List Sum',
+      description: 'Cho mot list cac so nguyen, tra ve tong cua tat ca cac phan tu.',
+      difficulty: 'EASY',
+      timeLimit: 1000,
+      memoryLimit: 256,
+    },
+  });
+
+  // Testcases for Python problems
+  await prisma.testcase.createMany({
+    data: [
+      { problemId: pyProblem1.id, input: '[2,7,11,15]\n9', expectedOutput: '[0,1]', isPublic: true },
+      { problemId: pyProblem1.id, input: '[3,2,4]\n6', expectedOutput: '[1,2]', isPublic: false },
+      { problemId: pyProblem2.id, input: '"hello"', expectedOutput: '"olleh"', isPublic: true },
+      { problemId: pyProblem3.id, input: '[1,2,3,4]', expectedOutput: '10', isPublic: true },
+      { problemId: pyProblem3.id, input: '[10,-1,5]', expectedOutput: '14', isPublic: false },
+    ],
+  });
+
+  // Python minitest for Phase 1 (Python Co Ban)
+  const pyMinitest1 = await prisma.minitest.create({
+    data: { phaseId: c3_phase1.id, title: 'Kiem tra 1 - Python Co Ban' },
+  });
+
+  await prisma.minitestQuestion.createMany({
+    data: [
+      { minitestId: pyMinitest1.id, problemId: pyProblem1.id },
+      { minitestId: pyMinitest1.id, problemId: pyProblem2.id },
+    ],
+  });
+
+  // Python minitest for Phase 2 (Python for Analysis)
+  const pyMinitest2 = await prisma.minitest.create({
+    data: { phaseId: c3_phase2.id, title: 'Kiem tra 2 - Python Lists' },
+  });
+
+  await prisma.minitestQuestion.createMany({
+    data: [
+      { minitestId: pyMinitest2.id, problemId: pyProblem3.id },
+    ],
+  });
+
+  // Minitest submissions for Python minitests
+  await prisma.minitestSubmission.createMany({
+    data: [
+      { userId: student2.id, minitestId: pyMinitest1.id, score: 100, result: '{"passed": 2, "total": 2}' },
+      { userId: student3.id, minitestId: pyMinitest1.id, score: 80, result: '{"passed": 2, "total": 2}' },
+      { userId: student2.id, minitestId: pyMinitest2.id, score: 100, result: '{"passed": 1, "total": 1}' },
+    ],
+  });
+
+  console.log('Tao Python minitests');
+
+  // --- JavaScript minitest (for Course 1) ---
   const minitest1 = await prisma.minitest.create({
-    data: { phaseId: c1_phase1.id, title: 'Kiem tra 1 - JavaScript Co Ban', orderIndex: 0 },
+    data: { phaseId: c1_phase1.id, title: 'Kiem tra 1 - JavaScript Co Ban' },
   });
 
   await prisma.minitestQuestion.createMany({

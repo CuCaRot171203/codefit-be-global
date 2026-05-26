@@ -7,7 +7,8 @@
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "dev": "nodemon --exec \"tsx\" server.ts",
-    "build": "tsc",
+    "build": "esbuild ./server.ts --bundle --platform=node --outdir=dist --format=esm --sourcemap",
+    "build:tsc": "tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "db:seed": "npx tsx prisma/seed.ts",
@@ -50,6 +51,7 @@
     "nodemon": "^3.1.14",
     "ts-jest": "^29.2.5",
     "tsx": "^4.19.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "esbuild": "^0.27.7"
   }
 }
