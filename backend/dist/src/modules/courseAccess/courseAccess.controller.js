@@ -1,0 +1,204 @@
+"use strict";
+/**
+ * Course Access Controller - Enhanced
+ */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const base_controller_1 = require("../../base/base.controller");
+const courseAccess_service_1 = __importDefault(require("./courseAccess.service"));
+class CourseAccessController extends base_controller_1.BaseController {
+    /**
+     * Tạo access code cho khóa học
+     * POST /api/course-access/:courseId/codes
+     */
+    createCode = async (req, res, next) => {
+        try {
+            const { courseId } = req.params;
+            const adminId = req.user?.userId;
+            const code = await courseAccess_service_1.default.createAccessCode(courseId, adminId);
+            this.success(res, code, 'Access code created', 201);
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Tạo nhiều access codes
+     * POST /api/course-access/:courseId/codes/bulk
+     */
+    createBulkCodes = async (req, res, next) => {
+        try {
+            const { courseId } = req.params;
+            const { count = 1 } = req.body;
+            const adminId = req.user?.userId;
+            const codes = await courseAccess_service_1.default.createBulkAccessCodes(courseId, adminId, count);
+            this.success(res, codes, `${codes.length} codes created`, 201);
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Gán quyền cho user bằng email
+     * POST /api/course-access/:courseId/grant
+     */
+    grantAccess = async (req, res, next) => {
+        try {
+            const { courseId } = req.params;
+            const { email } = req.body;
+            const adminId = req.user?.userId;
+            const result = await courseAccess_service_1.default.grantAccessToUser(courseId, email, adminId);
+            this.success(res, result, 'Access granted to user');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Gán quyền cho nhiều users
+     * POST /api/course-access/:courseId/assign-users
+     */
+    assignToUsers = async (req, res, next) => {
+        try {
+            const { courseId } = req.params;
+            const { userIds } = req.body;
+            const adminId = req.user?.userId;
+            if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+                this.error(res, 'userIds is required and must be an array', 400);
+                return;
+            }
+            const result = await courseAccess_service_1.default.assignToUsers(courseId, userIds, adminId);
+            this.success(res, result, `${result.assignedCount} users assigned`);
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Lấy danh sách users chưa enroll
+     * GET /api/course-access/:courseId/users/not-enrolled
+     */
+    getUsersNotEnrolled = async (req, res, next) => {
+        try {
+            const { courseId } = req.params;
+            const { search } = req.query;
+            const users = await courseAccess_service_1.default.getUsersNotEnrolled(courseId, search);
+            this.success(res, users, 'Users retrieved');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Kích hoạt khóa học bằng code (user)
+     * POST /api/course-access/activate
+     */
+    activateByCode = async (req, res, next) => {
+        try {
+            const { code } = req.body;
+            const userId = req.user?.userId;
+            if (!userId) {
+                this.error(res, 'Unauthorized', 401);
+                return;
+            }
+            const result = await courseAccess_service_1.default.activateByCode(code, userId);
+            this.success(res, result, 'Course activated successfully');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Validate code (không cần đăng nhập - cho email link)
+     * GET /api/course-access/activate/:code
+     */
+    validateCodeLink = async (req, res, next) => {
+        try {
+            const { code } = req.params;
+            const result = await courseAccess_service_1.default.activateByCodeLink(code);
+            this.success(res, result, 'Code is valid');
+        }
+        catch (error) {
+            this.error(res, error.message, 400);
+        }
+    };
+    /**
+     * Lấy danh sách codes của khóa học
+     * GET /api/course-access/:courseId/codes
+     */
+    getCodes = async (req, res, next) => {
+        try {
+            const { courseId } = req.params;
+            const codes = await courseAccess_service_1.default.getCodesByCourse(courseId);
+            this.success(res, codes, 'Codes retrieved');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Xóa access code
+     * DELETE /api/course-access/codes/:codeId
+     */
+    deleteCode = async (req, res, next) => {
+        try {
+            const { codeId } = req.params;
+            await courseAccess_service_1.default.deleteCode(codeId);
+            this.success(res, null, 'Code deleted');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Lấy danh sách users đã enroll
+     * GET /api/course-access/:courseId/enrollments
+     */
+    getEnrollments = async (req, res, next) => {
+        try {
+            const { courseId } = req.params;
+            const enrollments = await courseAccess_service_1.default.getEnrollments(courseId);
+            this.success(res, enrollments, 'Enrollments retrieved');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Cập nhật số bài đã mở khóa cho user (admin unlock)
+     * PUT /api/course-access/:courseId/enrollments/:userId/unlock
+     */
+    updateUserUnlocks = async (req, res, next) => {
+        try {
+            const { courseId, userId } = req.params;
+            const { currentUnlocks } = req.body;
+            if (typeof currentUnlocks !== 'number' || currentUnlocks < 0) {
+                this.error(res, 'currentUnlocks must be a positive number', 400);
+                return;
+            }
+            const result = await courseAccess_service_1.default.updateUserUnlocks(courseId, userId, currentUnlocks);
+            this.success(res, result, 'Unlocks updated successfully');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    /**
+     * Mở khóa toàn bộ bài học cho user
+     * POST /api/course-access/:courseId/enrollments/:userId/unlock-all
+     */
+    unlockAllLessons = async (req, res, next) => {
+        try {
+            const { courseId, userId } = req.params;
+            const result = await courseAccess_service_1.default.unlockAllLessonsForUser(courseId, userId);
+            this.success(res, result, 'All lessons unlocked for user');
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+}
+exports.default = new CourseAccessController();
+//# sourceMappingURL=courseAccess.controller.js.map

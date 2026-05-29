@@ -1,6 +1,6 @@
 /**
  * MinitestResult Repository
- * 
+ *
  * Xử lý các thao tác database cho kết quả bài kiểm tra.
  * Quản lý việc lưu và truy vấn kết quả làm bài của người dùng.
  */
@@ -21,12 +21,8 @@ interface MinitestResult {
   minitestId: string;
   /** ID của người dùng */
   userId: string;
-  /** Số câu trả lời đúng */
-  score: number;
-  /** Tổng số câu hỏi */
-  totalQuestions: number;
-  /** Thời điểm nộp bài */
-  completedAt: Date;
+  /** Số câu trả lời đúng / Điểm số */
+  score: number | null;
 }
 
 /**
@@ -34,9 +30,8 @@ interface MinitestResult {
  * @class MinitestResultRepository
  * @extends BaseRepository<MinitestResult>
  */
-class MinitestResultRepository extends BaseRepository<MinitestResult> {
-  /** Prisma model được sử dụng cho các thao tác database */
-  protected model = prisma.minitestResult;
+class MinitestResultRepository {
+  protected model = prisma.minitestSubmission;
 
   /**
    * Tìm kết quả bài test của người dùng (lần làm gần nhất)
@@ -44,26 +39,17 @@ class MinitestResultRepository extends BaseRepository<MinitestResult> {
    * @param minitestId - ID của bài test
    * @returns Promise<MinitestResult | null> - Kết quả tìm được hoặc null
    */
-  async findByUserAndMinitest(userId: string, minitestId: string): Promise<MinitestResult | null> {
-    // Bước 1: Tìm kết quả với điều kiện userId và minitestId
-    // Bước 2: Lấy kết quả gần nhất (sắp xếp theo completedAt giảm dần)
+  async findByUserAndMinitest(userId: string, minitestId: string): Promise<any> {
     return this.model.findFirst({
       where: { userId, minitestId },
-      orderBy: { completedAt: 'desc' }
+      orderBy: { createdAt: 'desc' }
     });
   }
 
-  /**
-   * Tìm tất cả kết quả của một người dùng
-   * @param userId - ID của người dùng
-   * @returns Promise<MinitestResult[]> - Danh sách kết quả bài test
-   */
-  async findByUserId(userId: string): Promise<MinitestResult[]> {
-    // Bước 1: Tìm tất cả kết quả của userId
-    // Bước 2: Sắp xếp theo thời gian nộp giảm dần
+  async findByUserId(userId: string): Promise<any[]> {
     return this.model.findMany({
       where: { userId },
-      orderBy: { completedAt: 'desc' }
+      orderBy: { createdAt: 'desc' }
     });
   }
 }

@@ -6,9 +6,7 @@
  */
 
 import statsRepository from '../repositories/stats.repository';
-import Redis from 'ioredis';
-
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { redis } from '../../../utils/redis';
 
 /**
  * StatsService - Business logic layer cho thống kê
@@ -228,6 +226,17 @@ class StatsService {
     } catch (error) { console.error('Redis get error:', error); }
     const data = await statsRepository.getUserEvaluation(userId);
     try { await redis.setex(cacheKey, 300, JSON.stringify(data)); } catch (error) { console.error('Redis set error:', error); }
+    return data;
+  }
+
+  async getActivity30Days(userId: string): Promise<any> {
+    const cacheKey = `stats:activity30:${userId}`;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (error) { console.error('Redis get error:', error); }
+    const data = await statsRepository.getActivity30Days(userId);
+    try { await redis.setex(cacheKey, 60, JSON.stringify(data)); } catch (error) { console.error('Redis set error:', error); }
     return data;
   }
 }

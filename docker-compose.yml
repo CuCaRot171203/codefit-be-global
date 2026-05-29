@@ -4,6 +4,7 @@
 services:
   # ============ Backend App ============
   app:
+    
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -14,11 +15,28 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      DATABASE_URL: mysql://root:root@mysql:3306/codefit
+      DATABASE_URL: mysql://root:123456@mysql:3306/codefit
       REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-codefit-jwt-secret-key-2026}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8000}
+      IMAGEKIT_PUBLIC_KEY: public_1DNJAq0R+OOSB8QhzkU1Uy0elfc=
+      IMAGEKIT_PRIVATE_KEY: private_j0jwUaW3aR1zXujIXRlfQWtA1jY=
+      IMAGEKIT_URL_ENDPOINT: https://ik.imagekit.io/codefitedu
+      GEMINI_PROJECT_NAME: CodefitAPi
+      GEMINI_ID_PROJECT: "100679833268"
+      GEMINI_API_KEY: AIzaSyCGkOVwePTiU0Y_vCnxichnA6idSwLrEig
+      SEPAY_MERCHANT_ID: SP-LIVE-NT34BB73
+      SEPAY_SECRET_KEY: spsk_live_rQHXi9Ly1eyDGCPb1339Z2Tf9ccB6N3a
+      SEPAY_ENV: sandbox
+      SEPAY_IPN_URL: http://localhost:5000/api/payment/sepay/ipn
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: codefitedu@gmail.com
+      SMTP_PASS: qgji jali pduj wjmy
+      SMTP_FROM: CodeFit <noreply@codefit.edu.vn>
+      PAYOS_CLIENT_ID: a4707b69-2fbe-4350-9bb7-5fc742840227
+      PAYOS_API_KEY: d90cf20f-bd98-4090-b100-1b0334c99bde
+      PAYOS_CHECKSUM_KEY: 1539a176ecb10392c4c8ca9744a142ccfa30cd429c4a2cb71f8ecb1b162a0b24
     depends_on:
       mysql:
         condition: service_healthy
@@ -28,17 +46,24 @@ services:
         condition: service_started
     networks:
       - codefit-network
+    # Seed chạy 1 lần khi chưa có data, sau đó app start
+    volumes:
+      - ./docker-seed.sh:/docker-seed.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/docker-seed.sh"]
 
   # ============ MySQL Database ============
   mysql:
-    image: mysql:8
+    build:
+      context: .
+      dockerfile: mysql/Dockerfile
     container_name: codefit_mysql
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: codefit
-    ports:
-      - "3307:3306"
+    # ports:
+    #   - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -55,8 +80,8 @@ services:
     image: redis:7-alpine
     container_name: codefit_redis
     restart: always
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -68,9 +93,9 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: codefit_rabbitmq
     restart: always
-    ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # Management UI
+    # ports:
+    #   - "5672:5672"     # AMQP
+    #   - "15672:15672"   # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest

@@ -1,13 +1,12 @@
 /**
  * Feedback Service
- * 
+ *
  * Chứa business logic cho các thao tác với Feedback.
- * Xử lý việc tạo, cập nhật, xóa feedback và tính toán rating trung bình.
+ * Xử lý việc tạo, cập nhật, xóa feedback.
  */
 
 import { BaseService } from '../../../base/base.service';
 import feedbackRepository from '../repositories/feedback.repository';
-import { CreateFeedbackDto, UpdateFeedbackDto } from '../types';
 
 /**
  * FeedbackService - Business logic layer cho Feedback
@@ -25,97 +24,36 @@ class FeedbackService extends BaseService<typeof feedbackRepository> {
    * @param userId - ID của người gửi feedback
    * @param dto - Dữ liệu tạo feedback
    * @returns Promise<Feedback> - Feedback vừa được tạo
-   * @throws Error - Nếu thiếu dữ liệu, rating không hợp lệ, hoặc đã feedback rồi
+   * @throws Error - Nếu thiếu dữ liệu
    */
-  async create(userId: string, dto: CreateFeedbackDto): Promise<any> {
-    // Bước 1: Validate dữ liệu - yêu cầu targetId, rating, comment
-    if (!dto.targetId || !dto.rating || !dto.comment) {
-      throw new Error('targetId, rating, and comment are required');
+  async create(userId: string, dto: any): Promise<any> {
+    // Bước 1: Validate dữ liệu - yêu cầu message
+    if (!dto.message) {
+      throw new Error('message is required');
     }
 
-    // Bước 2: Validate rating phải trong khoảng 1-5
-    if (dto.rating < 1 || dto.rating > 5) {
-      throw new Error('Rating must be between 1 and 5');
-    }
-
-    // Bước 3: Kiểm tra user đã feedback cho target này chưa
-    const existing = await feedbackRepository.findByUserAndTarget(
-      userId,
-      dto.targetId,
-      dto.targetType
-    );
-
-    if (existing) {
-      throw new Error('You have already submitted feedback for this target');
-    }
-
-    // Bước 4: Tạo feedback mới
+    // Bước 2: Tạo feedback mới
     return this.repository.create({
       userId,
-      targetId: dto.targetId,
-      targetType: dto.targetType,
-      rating: dto.rating,
-      comment: dto.comment
-    } as any);
+      message: dto.message
+    });
   }
 
   /**
-   * Lấy tất cả feedback của một target
-   * @param targetId - ID của đối tượng được đánh giá
-   * @param targetType - Loại đối tượng
+   * Lấy tất cả feedback
    * @returns Promise<Feedback[]> - Danh sách feedback
    */
-  async getByTarget(targetId: string, targetType: string): Promise<any[]> {
-    // Bước 1: Gọi repository để tìm feedback theo target
-    return this.repository.findByTargetId(targetId, targetType);
+  async getAll(): Promise<any[]> {
+    return this.repository.findAllFeedback();
   }
 
   /**
-   * Lấy điểm đánh giá trung bình của một target
-   * @param targetId - ID của đối tượng được đánh giá
-   * @param targetType - Loại đối tượng
-   * @returns Promise<object> - Thông tin rating trung bình và số lượng
+   * Lấy feedback của một user
+   * @param userId - ID của người dùng
+   * @returns Promise<Feedback[]> - Danh sách feedback của user
    */
-  async getAverageRating(targetId: string, targetType: string): Promise<any> {
-    // Bước 1: Tính điểm trung bình
-    const avgRating = await this.repository.getAverageRating(targetId, targetType);
-    // Bước 2: Đếm số lượng feedback
-    const count = await this.repository.getFeedbackCount(targetId, targetType);
-
-    // Bước 3: Trả về thông tin với rating được làm tròn 1 chữ số
-    return {
-      targetId,
-      targetType,
-      averageRating: Math.round(avgRating * 10) / 10,
-      totalFeedback: count
-    };
-  }
-
-  /**
-   * Cập nhật một feedback
-   * @param id - ID của feedback cần cập nhật
-   * @param userId - ID của người cập nhật (để kiểm tra quyền)
-   * @param dto - Dữ liệu cập nhật
-   * @returns Promise<Feedback> - Feedback sau khi cập nhật
-   * @throws Error - Nếu feedback không tồn tại hoặc không có quyền
-   */
-  async update(id: string, userId: string, dto: UpdateFeedbackDto): Promise<any> {
-    // Bước 1: Kiểm tra feedback có tồn tại hay không
-    const feedback = await this.repository.findById(id);
-    if (!feedback) {
-      throw new Error('Feedback not found');
-    }
-
-    // Bước 2: Kiểm tra quyền sở hữu - chỉ người tạo mới được sửa
-    if (feedback.userId !== userId) {
-      throw new Error('You can only update your own feedback');
-    }
-
-    // Bước 3: Cập nhật các trường được phép
-    return this.repository.update(id, {
-      rating: dto.rating || feedback.rating,
-      comment: dto.comment || feedback.comment
-    } as any);
+  async getByUser(userId: string): Promise<any[]> {
+    return this.repository.findByUserId(userId);
   }
 
   /**

@@ -101,45 +101,44 @@ class LessonReviewService extends BaseService<typeof lessonReviewRepository> {
       },
     });
 
-    console.log('[LESSON REVIEW] Approve - lessonRequest:', lessonRequest);
-
+    // lessonRequest may not exist if lesson was created directly by admin
+    let review;
     if (!lessonRequest) {
-      throw new Error('Lesson request not found');
+      // Still allow approval for admin-created lessons
+      console.log('[LESSON REVIEW] Approve - No lessonRequest found, skipping notification');
+    } else {
+      // Notify lecture via email
+      if (lessonRequest.lecture) {
+        await emailService.sendLessonApprovedNotification(
+          lessonRequest.lecture.email,
+          lessonRequest.lecture.fullName || 'Giảng viên',
+          lesson.title
+        );
+
+        await notificationService.createNotification({
+          userId: lessonRequest.lecture.id,
+          type: 'lesson_approved',
+          title: 'Bài học được duyệt thành công!',
+          message: `Bài học "${lesson.title}" đã được admin duyệt. Bạn có thể xuất bản hoặc tiếp tục chỉnh sửa.`,
+          metadata: {
+            lessonId: lessonId,
+            lessonTitle: lesson.title,
+            status: 'APPROVED',
+            feedback: feedback || null,
+            actionUrl: `/lecture/lessons/${lessonId}/edit`,
+          },
+        });
+      }
     }
 
     // Update lesson status to APPROVED
     await prisma.lesson.update({
       where: { id: lessonId },
-      data: {
-        status: 'APPROVED',
-      },
+      data: { status: 'APPROVED' },
     });
 
     // Create review record
-    const review = await this.repository.createReview(lessonId, adminId, feedback);
-
-    // Notify lecture via email
-    if (lessonRequest.lecture) {
-      await emailService.sendLessonApprovedNotification(
-        lessonRequest.lecture.email,
-        lessonRequest.lecture.fullName || 'Giảng viên',
-        lesson.title
-      );
-
-      await notificationService.createNotification({
-        userId: lessonRequest.lecture.id,
-        type: 'lesson_approved',
-        title: 'Bài học được duyệt thành công!',
-        message: `Bài học "${lesson.title}" đã được admin duyệt. Bạn có thể xuất bản hoặc tiếp tục chỉnh sửa.`,
-        metadata: {
-          lessonId: lessonId,
-          lessonTitle: lesson.title,
-          status: 'APPROVED',
-          feedback: feedback || null,
-          actionUrl: `/lecture/lessons/${lessonId}/edit`,
-        },
-      });
-    }
+    review = await this.repository.createReview(lessonId, adminId, feedback);
 
     return review;
   }

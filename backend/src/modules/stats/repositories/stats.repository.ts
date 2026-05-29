@@ -6,10 +6,9 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import Redis from 'ioredis';
+import { redis } from '../../../utils/redis';
 
 const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 /**
  * StatsRepository - Quản lý database operations cho thống kê
@@ -79,20 +78,16 @@ class StatsRepository {
       ? Math.round(enrollments.reduce((sum, e) => sum + e.progress, 0) / enrollments.length)
       : 0;
 
-    // Bước 3: Lấy thống kê feedback của khóa học
-    const feedback = await prisma.feedback.aggregate({
-      where: { targetId: courseId, targetType: 'course' },
-      _avg: { rating: true },
-      _count: { id: true }
-    });
+    // Bước 3: Lấy thống kê feedback của khóa học (Feedback schema đơn giản, không có targetId/targetType/rating)
+    const feedbackCount = await prisma.feedback.count();
 
     // Bước 4: Trả về kết quả với các số liệu thống kê
     return {
       courseId,
       totalEnrollments: enrollments.length,
       averageProgress: avgProgress,
-      averageRating: Math.round((feedback._avg.rating || 0) * 10) / 10,
-      totalFeedback: feedback._count.id
+      averageRating: 0,
+      totalFeedback: feedbackCount
     };
   }
 
@@ -661,7 +656,7 @@ class StatsRepository {
       })
     );
     const acFirstRate = problemFirstAC.length > 0
-      ? problemFirstAC.reduce((a, b) => a + b, 0) / problemFirstAC.length
+      ? problemFirstAC.reduce((a: number, b: number) => a + b, 0) / problemFirstAC.length
       : 0;
 
     // WA error rate
@@ -761,6 +756,48 @@ class StatsRepository {
       taskCompletion: { score: taskCompletion, label: 'Mức độ hoàn thành' },
       finalScore
     };
+  }
+
+  // ============ Profile Page: 30-day Activity ============
+  async getActivity30Days(userId: string): Promise<any> {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 29);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+    const result: any[] = [];
+
+    for (let i = 0; i < 30; i++) {
+      const dayStart = new Date(thirtyDaysAgo);
+      dayStart.setDate(thirtyDaysAgo.getDate() + i);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayStart.getDate() + 1);
+
+      const submissionCount = await prisma.submission.count({
+        where: { userId, createdAt: { gte: dayStart, lt: dayEnd } }
+      });
+      const lessonProgressCount = await prisma.lessonProgress.count({
+        where: { userId, completedAt: { gte: dayStart, lt: dayEnd } }
+      });
+      const lessonSubmissionCount = await prisma.lessonSubmission.count({
+        where: { userId, createdAt: { gte: dayStart, lt: dayEnd } }
+      });
+
+      const value = submissionCount + lessonProgressCount + lessonSubmissionCount;
+      const dateObj = new Date(dayStart);
+      const day = dateObj.getDate();
+      const month = dateObj.getMonth() + 1;
+      const dayName = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dateObj.getDay()];
+
+      result.push({
+        date: dayStart.toISOString().split('T')[0],
+        dateLabel: `${day}/${month}`,
+        label: `${dayName} ${day}`,
+        value,
+      });
+    }
+
+    return result;
   }
 }
 

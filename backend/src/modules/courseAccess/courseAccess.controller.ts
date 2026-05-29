@@ -7,6 +7,10 @@ import { BaseController } from '../../base/base.controller';
 import courseAccessService from './courseAccess.service';
 
 class CourseAccessController extends BaseController {
+  constructor() {
+    // @ts-ignore - BaseController expects generic type but we use any for flexibility
+    super(undefined as any);
+  }
   
   /**
    * Tạo access code cho khóa học
@@ -17,7 +21,7 @@ class CourseAccessController extends BaseController {
       const { courseId } = req.params;
       const adminId = req.user?.userId;
 
-      const code = await courseAccessService.createAccessCode(courseId, adminId);
+      const code = await courseAccessService.createAccessCode(Array.isArray(courseId) ? courseId[0] : courseId, adminId || '');
       this.success(res, code, 'Access code created', 201);
     } catch (error: any) {
       next(error);
@@ -34,7 +38,7 @@ class CourseAccessController extends BaseController {
       const { count = 1 } = req.body;
       const adminId = req.user?.userId;
 
-      const codes = await courseAccessService.createBulkAccessCodes(courseId, adminId, count);
+      const codes = await courseAccessService.createBulkAccessCodes(Array.isArray(courseId) ? courseId[0] : courseId, adminId || '', count);
       this.success(res, codes, `${codes.length} codes created`, 201);
     } catch (error: any) {
       next(error);
@@ -51,7 +55,7 @@ class CourseAccessController extends BaseController {
       const { email } = req.body;
       const adminId = req.user?.userId;
 
-      const result = await courseAccessService.grantAccessToUser(courseId, email, adminId);
+      const result = await courseAccessService.grantAccessToUser(Array.isArray(courseId) ? courseId[0] : courseId, email, adminId || '');
       this.success(res, result, 'Access granted to user');
     } catch (error: any) {
       next(error);
@@ -73,7 +77,7 @@ class CourseAccessController extends BaseController {
         return;
       }
 
-      const result = await courseAccessService.assignToUsers(courseId, userIds, adminId);
+      const result = await courseAccessService.assignToUsers(Array.isArray(courseId) ? courseId[0] : courseId, userIds, adminId || '');
       this.success(res, result, `${result.assignedCount} users assigned`);
     } catch (error: any) {
       next(error);
@@ -89,7 +93,7 @@ class CourseAccessController extends BaseController {
       const { courseId } = req.params;
       const { search } = req.query;
 
-      const users = await courseAccessService.getUsersNotEnrolled(courseId, search as string);
+      const users = await courseAccessService.getUsersNotEnrolled(Array.isArray(courseId) ? courseId[0] : courseId, search as string);
       this.success(res, users, 'Users retrieved');
     } catch (error: any) {
       next(error);
@@ -125,7 +129,7 @@ class CourseAccessController extends BaseController {
     try {
       const { code } = req.params;
 
-      const result = await courseAccessService.activateByCodeLink(code);
+      const result = await courseAccessService.activateByCodeLink(Array.isArray(code) ? code[0] : code);
       this.success(res, result, 'Code is valid');
     } catch (error: any) {
       this.error(res, error.message, 400);
@@ -140,7 +144,7 @@ class CourseAccessController extends BaseController {
     try {
       const { courseId } = req.params;
 
-      const codes = await courseAccessService.getCodesByCourse(courseId);
+      const codes = await courseAccessService.getCodesByCourse(Array.isArray(courseId) ? courseId[0] : courseId);
       this.success(res, codes, 'Codes retrieved');
     } catch (error: any) {
       next(error);
@@ -155,7 +159,7 @@ class CourseAccessController extends BaseController {
     try {
       const { codeId } = req.params;
 
-      await courseAccessService.deleteCode(codeId);
+      await courseAccessService.deleteCode(Array.isArray(codeId) ? codeId[0] : codeId);
       this.success(res, null, 'Code deleted');
     } catch (error: any) {
       next(error);
@@ -170,7 +174,7 @@ class CourseAccessController extends BaseController {
     try {
       const { courseId } = req.params;
 
-      const enrollments = await courseAccessService.getEnrollments(courseId);
+      const enrollments = await courseAccessService.getEnrollments(Array.isArray(courseId) ? courseId[0] : courseId);
       this.success(res, enrollments, 'Enrollments retrieved');
     } catch (error: any) {
       next(error);
@@ -191,7 +195,11 @@ class CourseAccessController extends BaseController {
         return;
       }
 
-      const result = await courseAccessService.updateUserUnlocks(courseId, userId, currentUnlocks);
+      const result = await courseAccessService.updateUserUnlocks(
+        Array.isArray(courseId) ? courseId[0] : courseId,
+        Array.isArray(userId) ? userId[0] : userId,
+        currentUnlocks
+      );
       this.success(res, result, 'Unlocks updated successfully');
     } catch (error: any) {
       next(error);
@@ -206,7 +214,10 @@ class CourseAccessController extends BaseController {
     try {
       const { courseId, userId } = req.params;
 
-      const result = await courseAccessService.unlockAllLessonsForUser(courseId, userId);
+      const result = await courseAccessService.unlockAllLessonsForUser(
+        Array.isArray(courseId) ? courseId[0] : courseId,
+        Array.isArray(userId) ? userId[0] : userId
+      );
       this.success(res, result, 'All lessons unlocked for user');
     } catch (error: any) {
       next(error);

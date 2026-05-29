@@ -81,7 +81,7 @@ class AuthService extends BaseService<typeof authRepository> {
 
     // Tạo UserSession để tracking login streak
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setHours(expiresAt.getHours() + 6);
     await prisma.userSession.create({
       data: {
         userId: user.id,
@@ -135,7 +135,7 @@ class AuthService extends BaseService<typeof authRepository> {
    * @returns JWT token string
    */
   generateToken(userId: string, roleId: string, roleName: string): string {
-    return jwt.sign({ userId, roleId, roleName }, JWT_SECRET, { expiresIn: '7d' });
+    return jwt.sign({ userId, roleId, roleName }, JWT_SECRET, { expiresIn: '6h' });
   }
 
   /**

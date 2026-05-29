@@ -2,6 +2,7 @@
  * Seed script - Admin only version
  * Run with: npm run db:seed:admin
  */
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 

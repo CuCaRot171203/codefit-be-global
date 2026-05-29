@@ -63,7 +63,7 @@ class MinitestRepository extends BaseRepository<Minitest> {
    * @param courseId - ID của khóa học
    * @returns Promise<Minitest[]> - Danh sách bài test của khóa học
    */
-  async findByCourseId(courseId: string): Promise<Minitest[]> {
+  async findByCourseId(courseId: string): Promise<any[]> {
     const phases = await prisma.phase.findMany({
       where: { courseId },
       select: { id: true },

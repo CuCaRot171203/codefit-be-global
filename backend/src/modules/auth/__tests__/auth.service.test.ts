@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+// @ts-ignore - vitest types
 import { describe, it, expect, beforeEach } from 'vitest';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'codefit-secret-key';

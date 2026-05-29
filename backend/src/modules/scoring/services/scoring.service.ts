@@ -4,7 +4,7 @@
  */
 
 import prisma from '../../../prisma';
-import { ScoreCalculationResult, TestCase, Hint } from './types';
+import { ScoreCalculationResult, TestCase, Hint } from '../types';
 
 class ScoringService {
   /**

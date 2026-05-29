@@ -2,6 +2,7 @@
  * Seed script - Full data version
  * Run with: npm run db:seed:full
  */
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 

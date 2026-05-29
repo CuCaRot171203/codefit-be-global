@@ -1,0 +1,198 @@
+"use strict";
+/**
+ * Stats Controller
+ *
+ * Xử lý các HTTP requests liên quan đến thống kê.
+ * Cung cấp các endpoint để lấy thống kê người dùng, khóa học và nền tảng.
+ */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const stats_service_1 = __importDefault(require("../services/stats.service"));
+/**
+ * StatsController - HTTP layer cho Stats operations
+ * @class StatsController
+ */
+class StatsController {
+    /**
+     * Lấy thống kê của người dùng hiện tại
+     * GET /api/stats/me
+     * @param req - Request chứa user từ token
+     * @param res - Response trả về thông tin thống kê
+     * @param next - Next function để xử lý lỗi
+     */
+    async getMyStats(req, res, next) {
+        try {
+            // Bước 1: Lấy userId từ token đã được verify
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            // Bước 2: Gọi service để lấy thống kê người dùng
+            const stats = await stats_service_1.default.getUserStats(userId);
+            // Bước 3: Trả về response với thông tin thống kê
+            res.json({ success: true, data: stats, message: 'Stats retrieved successfully' });
+        }
+        catch (error) {
+            // Bước 4: Chuyển lỗi đến middleware xử lý lỗi
+            next(error);
+        }
+    }
+    /**
+     * Lấy thống kê của một khóa học
+     * GET /api/stats/course/:courseId
+     * @param req - Request chứa params.courseId
+     * @param res - Response trả về thông tin thống kê khóa học
+     * @param next - Next function để xử lý lỗi
+     */
+    async getCourseStats(req, res, next) {
+        try {
+            // Bước 1: Lấy courseId từ URL params
+            const courseId = req.params.courseId;
+            const stats = await stats_service_1.default.getCourseStats(courseId);
+            // Bước 3: Trả về response với thông tin thống kê
+            res.json({ success: true, data: stats, message: 'Course stats retrieved successfully' });
+        }
+        catch (error) {
+            // Bước 4: Chuyển lỗi đến middleware xử lý lỗi
+            next(error);
+        }
+    }
+    /**
+     * Lấy thống kê tổng quan của nền tảng
+     * GET /api/stats/platform
+     * @param req - Request
+     * @param res - Response trả về thông tin thống kê nền tảng
+     * @param next - Next function để xử lý lỗi
+     */
+    async getPlatformStats(req, res, next) {
+        try {
+            // Bước 1: Gọi service để lấy thống kê nền tảng
+            const stats = await stats_service_1.default.getPlatformStats();
+            // Bước 2: Trả về response với thông tin thống kê
+            res.json({ success: true, data: stats, message: 'Platform stats retrieved successfully' });
+        }
+        catch (error) {
+            // Bước 3: Chuyển lỗi đến middleware xử lý lỗi
+            next(error);
+        }
+    }
+    /**
+     * Lấy so sánh progress theo tuần
+     * GET /api/stats/weekly-comparison
+     * @param req - Request chứa user từ token
+     * @param res - Response trả về thông tin so sánh tuần
+     * @param next - Next function để xử lý lỗi
+     */
+    async getWeeklyComparison(req, res, next) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const comparison = await stats_service_1.default.getWeeklyComparison(userId);
+            res.json({ success: true, data: comparison });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getScoreBreakdown(req, res, next) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const data = await stats_service_1.default.getUserScoreBreakdown(userId);
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getLoginDays(req, res, next) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const data = await stats_service_1.default.getUserLoginDays(userId);
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getWeeklyActivity(req, res, next) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const data = await stats_service_1.default.getUserWeeklyActivity(userId);
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getGlobalRank(req, res, next) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const data = await stats_service_1.default.getUserGlobalRank(userId);
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getGlobalLeaderboard(req, res, next) {
+        try {
+            const data = await stats_service_1.default.getGlobalLeaderboard();
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getEnrolledCourses(req, res, next) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const data = await stats_service_1.default.getUserEnrolledCourses(userId);
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getEvaluation(req, res, next) {
+        try {
+            const userId = req.user?.userId;
+            if (!userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const data = await stats_service_1.default.getUserEvaluation(userId);
+            res.json({ success: true, data });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+}
+exports.default = new StatsController();
+//# sourceMappingURL=stats.controller.js.map

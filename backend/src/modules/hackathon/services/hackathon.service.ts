@@ -109,7 +109,7 @@ class HackathonService extends BaseService<typeof hackathonRepository> {
    * @returns Promise<any[]> Danh sách tất cả hackathon
    */
   async getAll(): Promise<any[]> {
-    return this.repository.findAll();
+    return this.repository.findMany();
   }
 
   /**
@@ -386,7 +386,7 @@ class HackathonService extends BaseService<typeof hackathonRepository> {
       where: { lessonId: problemId, userId }
     });
 
-    if (!existingLessonSubmission || existingLessonSubmission.score < score) {
+    if (!existingLessonSubmission || (existingLessonSubmission.score ?? 0) < score) {
       await prisma.lessonSubmission.upsert({
         where: { id: existingLessonSubmission?.id || 'dummy' },
         create: {

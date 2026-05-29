@@ -20,8 +20,6 @@ export interface Progress {
   totalLessons: number;
   /** Phần trăm hoàn thành (0-100) */
   percentage: number;
-  /** Thời điểm cập nhật cuối cùng */
-  updatedAt: Date;
 }
 
 /**
@@ -45,9 +43,9 @@ export interface LessonProgress {
   /** ID của bài học */
   lessonId: string;
   /** ID của khóa học chứa bài học */
-  courseId: string;
+  courseId: string | null;
   /** Trạng thái hoàn thành */
-  completed: boolean;
+  isCompleted: boolean;
   /** Thời điểm hoàn thành (null nếu chưa hoàn thành) */
   completedAt: Date | null;
 }

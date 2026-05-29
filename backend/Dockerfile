@@ -18,8 +18,8 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build TypeScript
-RUN npm run build
+# Build TypeScript (server + seed)
+RUN npm run build && npm run build:seed
 
 # Remove dev dependencies
 RUN npm prune --production
@@ -39,9 +39,13 @@ COPY prisma ./prisma
 # Expose port
 EXPOSE 5000
 
+# Copy and set entrypoint
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1
 
-# Start app
-CMD ["node", "dist/server.js"]
+# Start app via entrypoint (runs migrations + seed first)
+ENTRYPOINT ["/docker-entrypoint.sh"]

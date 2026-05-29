@@ -104,6 +104,34 @@ class MinitestService {
     });
   }
 
+  async getByCourseId(courseId: string) {
+    return prisma.minitest.findMany({
+      where: {
+        phase: { courseId }
+      },
+      include: {
+        phase: {
+          include: {
+            course: {
+              select: { id: true, title: true }
+            }
+          }
+        },
+        questions: {
+          include: {
+            problem: true
+          }
+        },
+        _count: {
+          select: {
+            submissions: true
+          }
+        }
+      },
+      orderBy: { orderIndex: 'asc' }
+    });
+  }
+
   async createMinitest(data: {
     phaseId: string;
     title: string;
@@ -430,7 +458,7 @@ class MinitestService {
         minitestTitle: sub.minitest.title,
         courseTitle: sub.minitest.phase?.course?.title,
         score: sub.score,
-        totalScore: sub.minitest.questions.length * 100,
+        totalScore: (sub.minitest as any).questions?.length * 100 || 0,
         passedTests: parsedResult?.passedTests || 0,
         totalTests: parsedResult?.totalTests || 0,
         allPassed: parsedResult?.allPassed || false,

@@ -207,7 +207,7 @@ class PaymentController extends BaseController {
   createActivateCode = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.userId;
-      const userRole = req.user?.role;
+      const userRole = (req.user as any)?.roleName;
       
       if (!userId) {
         this.error(res, 'Unauthorized', 401);
@@ -323,7 +323,7 @@ class PaymentController extends BaseController {
     try {
       console.log('[PayOS Webhook] Received:', JSON.stringify(req.body, null, 2));
 
-      const webhookData = await payOS.webhooks.verify(req.body);
+      const webhookData = await payOS.webhooks.verify(req.body) as any;
 
       console.log('[PayOS Webhook] Verified data:', JSON.stringify(webhookData, null, 2));
 

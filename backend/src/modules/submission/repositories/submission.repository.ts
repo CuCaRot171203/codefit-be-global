@@ -25,7 +25,7 @@ class SubmissionRepository extends BaseRepository<Submission> {
    * @param userId - The unique identifier of the user
    * @returns Promise resolving to an array of user's submissions
    */
-  async findByUserId(userId: string): Promise<Submission[]> {
+  async findByUserId(userId: string): Promise<any[]> {
     return this.model.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -37,7 +37,7 @@ class SubmissionRepository extends BaseRepository<Submission> {
    * @param problemId - The unique identifier of the problem
    * @returns Promise resolving to an array of problem's submissions
    */
-  async findByProblemId(problemId: string): Promise<Submission[]> {
+  async findByProblemId(problemId: string): Promise<any[]> {
     return this.model.findMany({
       where: { problemId },
       orderBy: { createdAt: 'desc' }
@@ -63,7 +63,7 @@ class SubmissionRepository extends BaseRepository<Submission> {
    * @param data - The submission result data to create
    * @returns Promise resolving to the created submission result
    */
-  async createResult(data: any): Promise<SubmissionResult> {
+  async createResult(data: any): Promise<any> {
     return prisma.submissionResult.create({ data });
   }
 

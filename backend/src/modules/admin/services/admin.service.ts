@@ -89,7 +89,11 @@ class AdminService {
       throw new Error('Loại subscription không hợp lệ');
     }
 
-    return adminRepository.createCourse(data);
+    // Strip fields not in Prisma schema
+    const { isFreeCourse, ...validData } = data;
+    void isFreeCourse;
+
+    return adminRepository.createCourse(validData);
   }
 
   async updateCourse(id: string, data: any) {

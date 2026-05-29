@@ -40,7 +40,10 @@ router.get('/global-leaderboard', (req, res, next) => statsController.getGlobalL
 /** GET /api/stats/enrolled-courses - Lấy khóa học đã đăng ký kèm tiến độ */
 router.get('/enrolled-courses', verifyToken, (req, res, next) => statsController.getEnrolledCourses(req, res, next));
 
-/** GET /api/stats/evaluation - Lấy đánh giá 5 tiêu chí */
+  /** GET /api/stats/evaluation - Lấy đánh giá 5 tiêu chí */
 router.get('/evaluation', verifyToken, (req, res, next) => statsController.getEvaluation(req, res, next));
+
+/** GET /api/stats/activity-30-days - Lấy hoạt động 30 ngày */
+router.get('/activity-30-days', verifyToken, (req, res, next) => statsController.getActivity30Days(req, res, next));
 
 export default router;

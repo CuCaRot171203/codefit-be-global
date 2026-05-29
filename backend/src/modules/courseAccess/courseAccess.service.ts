@@ -145,7 +145,7 @@ class CourseAccessService {
       type: 'course_access_granted',
       title: 'Bạn được cấp quyền truy cập khóa học',
       message: `Bạn đã được cấp quyền truy cập khóa học "${course.title}". Bạn có thể bắt đầu học ngay!`,
-      metadata: JSON.stringify({ courseId, type: 'course_assigned' }),
+      metadata: { courseId, type: 'course_assigned' },
     });
 
     // Send email với link khóa học
@@ -209,7 +209,7 @@ class CourseAccessService {
         type: 'course_assigned',
         title: 'Bạn được cấp quyền truy cập khóa học',
         message: `Bạn đã được cấp quyền truy cập khóa học "${course.title}". Bạn có thể bắt đầu học ngay!`,
-        metadata: JSON.stringify({ courseId, type: 'course_assigned' }),
+        metadata: { courseId, type: 'course_assigned' },
       });
 
       // Send email với link khóa học
@@ -351,7 +351,7 @@ class CourseAccessService {
       type: 'course_access_with_code',
       title: 'Kích hoạt khóa học thành công',
       message: `Bạn đã kích hoạt thành công khóa học "${accessCode.course.title}". Chúc bạn học tốt!`,
-      metadata: JSON.stringify({ courseId: accessCode.courseId, type: 'course_activated' }),
+      metadata: { courseId: accessCode.courseId, type: 'course_activated' },
     });
 
     return {
@@ -553,7 +553,7 @@ class CourseAccessService {
       type: 'lessons_unlocked',
       title: 'Bài học đã được mở khóa',
       message: `Admin đã mở khóa thêm bài học cho bạn. Bây giờ bạn có thể truy cập ${currentUnlocks} bài học!`,
-      metadata: JSON.stringify({ courseId, currentUnlocks }),
+      metadata: { courseId, currentUnlocks },
     });
 
     return {
@@ -623,7 +623,7 @@ class CourseAccessService {
       type: 'all_lessons_unlocked',
       title: 'Toàn bộ bài học đã được mở khóa!',
       message: `Admin đã mở khóa toàn bộ bài học trong khóa học "${course.title}". Bạn có thể học tất cả ngay bây giờ!`,
-      metadata: JSON.stringify({ courseId, currentUnlocks: totalLessons }),
+      metadata: { courseId, currentUnlocks: totalLessons },
     });
 
     return {

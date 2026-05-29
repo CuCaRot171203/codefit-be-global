@@ -182,7 +182,7 @@ class LectureRepository {
         minitestId: true,
         score: true,
       },
-    });
+    }) as any[];
 
     // Group submissions by minitestId
     const submissionsByMinitest = new Map<string, { score: number }[]>();
@@ -208,7 +208,6 @@ class LectureRepository {
         courseName,
         totalAttempts,
         avgScore,
-        createdAt: minitest.createdAt,
       };
     });
   }

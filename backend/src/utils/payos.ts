@@ -27,8 +27,8 @@ function getPayOS(): PayOS {
 export default {
   paymentRequests: {
     create: (body: any) => getPayOS().paymentRequests.create(body),
-    get: (orderCode: string | number) => getPayOS().paymentRequests.get(orderCode),
-    cancel: (orderCode: string | number, reason?: string) => getPayOS().paymentRequests.cancel(orderCode, reason),
+    get: (orderCode: string | number) => getPayOS().paymentRequests.get(Number(orderCode)),
+    cancel: (orderCode: string | number, reason?: string) => getPayOS().paymentRequests.cancel(Number(orderCode), reason),
   },
   webhooks: {
     verify: (body: any) => getPayOS().webhooks.verify(body),

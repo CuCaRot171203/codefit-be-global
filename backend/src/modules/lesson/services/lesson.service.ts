@@ -36,7 +36,8 @@ class LessonService extends BaseService<typeof lessonRepository> {
       title: dto.title,
       content: dto.content,
       type: dto.type || 'video',
-      orderIndex: dto.orderIndex || 0
+      orderIndex: dto.orderIndex || 0,
+      isPublished: true
     } as any);
 
     // Bước 3: Return created lesson
@@ -64,6 +65,7 @@ class LessonService extends BaseService<typeof lessonRepository> {
       type: params.type || 'theory',
       status: params.status || 'DRAFT',
       orderIndex: maxOrder + 1,
+      isPublished: true
     } as any);
 
     return lesson;

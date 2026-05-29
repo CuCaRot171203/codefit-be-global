@@ -78,7 +78,7 @@ class LectureController extends BaseController {
       }
 
       const { courseId } = req.params;
-      const course = await lectureService.getCourseDetail(courseId, lectureId);
+      const course = await lectureService.getCourseDetail(Array.isArray(courseId) ? courseId[0] : courseId, lectureId);
       this.success(res, course, 'Course detail retrieved successfully');
     } catch (error: any) {
       const status = error.message.includes('not found') ? 404 : 500;
@@ -231,7 +231,7 @@ class LectureController extends BaseController {
 
       // Get lesson and verify lecture has access
       const lesson = await prisma.lesson.findUnique({
-        where: { id: lessonId },
+        where: { id: Array.isArray(lessonId) ? lessonId[0] : lessonId },
         include: {
           phase: {
             include: { course: true },
@@ -246,8 +246,9 @@ class LectureController extends BaseController {
         return;
       }
 
-      // Verify lecture is assigned to this course
-      const lectureCourse = await prisma.lectureCourse.findFirst({
+      // Verify lecture is assigned to this course (skip for admin)
+      const isAdmin = req.user?.roleName === 'admin';
+      const lectureCourse = isAdmin ? { id: 'admin-bypass' } : await prisma.lectureCourse.findFirst({
         where: { courseId: lesson.phase.courseId, lectureId },
       });
 
@@ -279,7 +280,7 @@ class LectureController extends BaseController {
 
       // Verify lecture has access
       const lesson = await prisma.lesson.findUnique({
-        where: { id: lessonId },
+        where: { id: Array.isArray(lessonId) ? lessonId[0] : lessonId },
         include: {
           phase: { include: { course: true } },
           lessonRequest: true,
@@ -291,15 +292,17 @@ class LectureController extends BaseController {
         return;
       }
 
-      // Check if lesson is editable (DRAFT or IN_PROGRESS)
-      if (lesson.status !== 'DRAFT' && lesson.status !== 'IN_PROGRESS') {
+      // Check if lesson request is in editable state (IN_PROGRESS or not exists)
+      const lessonRequestData = Array.isArray(lesson.lessonRequest) ? lesson.lessonRequest[0] : lesson.lessonRequest;
+      if (lessonRequestData && lessonRequestData.status !== 'IN_PROGRESS') {
         this.error(res, 'Bài học không thể chỉnh sửa ở trạng thái này', 400);
         return;
       }
 
-      // Verify lecture is assigned to this course
-      const lectureCourse = await prisma.lectureCourse.findFirst({
-        where: { courseId: lesson.phase.courseId, lectureId },
+      // Verify lecture is assigned to this course (skip for admin)
+      const isAdmin = req.user?.roleName === 'admin';
+      const lectureCourse = isAdmin ? { id: 'admin-bypass' } : await prisma.lectureCourse.findFirst({
+        where: { courseId: (lesson as any).phase?.courseId, lectureId },
       });
 
       if (!lectureCourse) {
@@ -308,7 +311,7 @@ class LectureController extends BaseController {
       }
 
       // Update or create lesson content
-      const result = await lessonContentService.updateLessonContent(lessonId, {
+      const result = await lessonContentService.updateLessonContent(Array.isArray(lessonId) ? lessonId[0] : lessonId, {
         content,
         testCases: typeof testCases === 'string' ? testCases : JSON.stringify(testCases),
         hints: typeof hints === 'string' ? hints : JSON.stringify(hints),
@@ -340,7 +343,7 @@ class LectureController extends BaseController {
 
       // Verify lecture has access
       const lesson = await prisma.lesson.findUnique({
-        where: { id: lessonId },
+        where: { id: Array.isArray(lessonId) ? lessonId[0] : lessonId },
         include: { phase: { include: { course: true } } },
       });
 
@@ -349,16 +352,18 @@ class LectureController extends BaseController {
         return;
       }
 
-      const lectureCourse = await prisma.lectureCourse.findFirst({
-        where: { courseId: lesson.phase.courseId, lectureId },
+      // Verify lecture is assigned to this course (skip for admin)
+      const isAdminScoring = req.user?.roleName === 'admin';
+      const lectureCourseScoring = isAdminScoring ? { id: 'admin-bypass' } : await prisma.lectureCourse.findFirst({
+        where: { courseId: (lesson as any).phase?.courseId, lectureId },
       });
 
-      if (!lectureCourse) {
+      if (!lectureCourseScoring) {
         this.error(res, 'Bạn không có quyền chỉnh sửa bài học này', 403);
         return;
       }
 
-      const result = await lessonContentService.updateScoring(lessonId, {
+      const result = await lessonContentService.updateScoring(Array.isArray(lessonId) ? lessonId[0] : lessonId, {
         baseScore,
         penaltyPerHint,
         timeBonusEnabled,
@@ -388,7 +393,7 @@ class LectureController extends BaseController {
 
       // Verify lecture has access
       const lesson = await prisma.lesson.findUnique({
-        where: { id: lessonId },
+        where: { id: Array.isArray(lessonId) ? lessonId[0] : lessonId },
         include: {
           phase: { include: { course: true } },
           lessonRequest: true,
@@ -403,7 +408,7 @@ class LectureController extends BaseController {
 
       // Verify lecture is assigned to this course
       const lectureCourse = await prisma.lectureCourse.findFirst({
-        where: { courseId: lesson.phase.courseId, lectureId },
+        where: { courseId: (lesson as any).phase?.courseId, lectureId },
       });
 
       if (!lectureCourse) {
@@ -411,16 +416,19 @@ class LectureController extends BaseController {
         return;
       }
 
+      const lessonIdStr = Array.isArray(lessonId) ? lessonId[0] : lessonId;
+
       // Update lesson status
       await prisma.lesson.update({
-        where: { id: lessonId },
+        where: { id: lessonIdStr },
         data: { status: 'PENDING_REVIEW' },
       });
 
       // Update or create lesson request status
-      if (lesson.lessonRequest && lesson.lessonRequest.id) {
+      const lessonRequestData = Array.isArray(lesson.lessonRequest) ? lesson.lessonRequest[0] : lesson.lessonRequest;
+      if (lessonRequestData && lessonRequestData.id) {
         await prisma.lessonRequest.update({
-          where: { id: lesson.lessonRequest.id },
+          where: { id: lessonRequestData.id },
           data: { status: 'PENDING' },
         });
       } else {
@@ -428,7 +436,7 @@ class LectureController extends BaseController {
         await prisma.lessonRequest.create({
           data: {
             lectureId,
-            lessonId,
+            lessonId: lessonIdStr,
             status: 'PENDING',
           },
         });

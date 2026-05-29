@@ -260,7 +260,7 @@ Dinh dang tra loi (chi tra ve JSON, khong giai thich gi them):
       }
     }
 
-    const data: GeminiResponse = await response.json();
+    const data = (await response.json()) as GeminiResponse;
 
     if (data.promptFeedback?.blockReason) {
       throw new Error(`Prompt blocked: ${data.promptFeedback.blockReason}`);

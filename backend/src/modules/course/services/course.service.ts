@@ -36,7 +36,7 @@ class CourseService extends BaseService<typeof courseRepository> {
     }
 
     // Bước 2: Chuẩn bị dữ liệu với giá trị mặc định cho các trường optional
-    const courseData = {
+    const courseData: any = {
       title: dto.title,
       description: dto.description,
       // Bước 3: Set giá trị mặc định cho price nếu không được cung cấp
@@ -45,15 +45,21 @@ class CourseService extends BaseService<typeof courseRepository> {
       level: dto.level || 'beginner',
       // Bước 5: Gán creatorId từ user đã xác thực
       creatorId,
-      // Course metadata
-      features: dto.features || null,
-      includes: dto.includes || null,
     };
 
-    // Bước 6: Gọi repository để tạo record mới trong database
-    const course = await this.repository.create(courseData as any);
+    // Course metadata fields if present
+    if ((dto as any).features !== undefined) {
+      courseData.features = (dto as any).features;
+    }
+    if ((dto as any).includes !== undefined) {
+      courseData.includes = (dto as any).includes;
+    }
 
-    return course;
+    // Bước 6: Gọi repository để tạo record mới trong database
+    const course = await this.repository.create(courseData);
+
+    // Transform to add empty phases array to match CourseWithPhases type
+    return { ...course, phases: [] };
   }
 
   /**
@@ -137,11 +143,11 @@ class CourseService extends BaseService<typeof courseRepository> {
       updateData.unlockByPhase = dto.unlockByPhase;
     }
     // Course metadata
-    if (dto.features !== undefined) {
-      updateData.features = dto.features;
+    if ((dto as any).features !== undefined) {
+      updateData.features = (dto as any).features;
     }
-    if (dto.includes !== undefined) {
-      updateData.includes = dto.includes;
+    if ((dto as any).includes !== undefined) {
+      updateData.includes = (dto as any).includes;
     }
 
     // Bước 3: Gọi repository để cập nhật record trong database

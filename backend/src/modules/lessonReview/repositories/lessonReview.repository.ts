@@ -47,7 +47,7 @@ class LessonReviewRepository extends BaseRepository<LessonReview> {
     });
   }
 
-  async findPendingReviews(): Promise<LessonReviewWithDetails[]> {
+  async findPendingReviews(): Promise<any[]> {
     const lessons = await prisma.lesson.findMany({
       where: { status: 'PENDING_REVIEW' },
       include: {

@@ -20,9 +20,10 @@ interface Notification {
   userId: string;
   type: string;
   title: string;
-  message: string;
+  content: string;
   isRead: boolean;
   createdAt: Date;
+  metadata?: string | null;
 }
 
 /**

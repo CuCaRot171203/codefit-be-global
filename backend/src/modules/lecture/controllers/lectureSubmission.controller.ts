@@ -10,6 +10,10 @@ import emailService from '../../email/email.service';
 import notificationService from '../../notification/services/notification.service';
 
 class LectureSubmissionController extends BaseController {
+  constructor() {
+    // @ts-ignore - BaseController expects generic type but we use any for flexibility
+    super(undefined as any);
+  }
   /**
    * Get all lesson submissions for lessons that this lecture owns
    */
@@ -21,12 +25,15 @@ class LectureSubmissionController extends BaseController {
         return;
       }
 
-      const { lessonId, courseId, status, page = '1', limit = '20' } = req.query;
-      const pageNum = parseInt(page as string);
-      const limitNum = parseInt(limit as string);
+      const lessonId = req.query.lessonId as string | undefined;
+      const courseId = req.query.courseId as string | undefined;
+      const status = req.query.status as string | undefined;
+      const page = (req.query.page as string) || '1';
+      const limit = (req.query.limit as string) || '20';
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
       const skip = (pageNum - 1) * limitNum;
 
-      // Get lessons that belong to this lecture's courses
       const lectureCourseIds = await prisma.lectureCourse.findMany({
         where: { lectureId },
         select: { courseId: true },
@@ -34,17 +41,16 @@ class LectureSubmissionController extends BaseController {
 
       const courseIds = lectureCourseIds.map((lc) => lc.courseId);
 
-      // Build where clause
       const whereClause: any = {};
-      
+
       if (lessonId) {
         whereClause.lessonId = lessonId;
       }
-      
+
       if (courseId) {
         whereClause.lesson = {
           phase: {
-            courseId: courseId as string,
+            courseId: courseId,
           },
         };
       } else if (courseIds.length > 0) {
@@ -54,8 +60,7 @@ class LectureSubmissionController extends BaseController {
           },
         };
       } else {
-        // No courses assigned, return empty
-        this.success(res, { submissions: [], total: 0, page: pageNum, limit: limitNum });
+        this.success(res, { submissions: [], total: 0, page: pageNum, limit: limitNum }, 'No courses assigned');
         return;
       }
 
@@ -101,7 +106,7 @@ class LectureSubmissionController extends BaseController {
         prisma.lessonSubmission.count({ where: whereClause }),
       ]);
 
-      this.success(res, { submissions, total, page: pageNum, limit: limitNum });
+      this.success(res, { submissions, total, page: pageNum, limit: limitNum }, 'Success');
     } catch (error: any) {
       next(error);
     }
@@ -118,10 +123,9 @@ class LectureSubmissionController extends BaseController {
         return;
       }
 
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { score } = req.body;
 
-      // Get submission with lesson info
       const submission = await prisma.lessonSubmission.findUnique({
         where: { id },
         include: {
@@ -143,14 +147,13 @@ class LectureSubmissionController extends BaseController {
             },
           },
         },
-      });
+      }) as any;
 
       if (!submission) {
         this.error(res, 'Submission not found', 404);
         return;
       }
 
-      // Verify lecture owns this course
       const lectureCourse = await prisma.lectureCourse.findFirst({
         where: {
           lectureId,
@@ -163,7 +166,6 @@ class LectureSubmissionController extends BaseController {
         return;
       }
 
-      // Update submission
       const updated = await prisma.lessonSubmission.update({
         where: { id },
         data: {
@@ -174,7 +176,6 @@ class LectureSubmissionController extends BaseController {
         },
       });
 
-      // Send notification to user
       await notificationService.createNotification({
         userId: submission.userId,
         type: 'submission_approved',
@@ -182,7 +183,6 @@ class LectureSubmissionController extends BaseController {
         message: `Bài tập "${submission.lesson.title}" đã được giảng viên duyệt. Điểm: ${updated.score || 0}`,
       });
 
-      // Send email to user
       await emailService.sendScoreNotification(
         submission.user.email,
         submission.user.fullName || submission.user.username,
@@ -211,10 +211,9 @@ class LectureSubmissionController extends BaseController {
         return;
       }
 
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { feedback } = req.body;
 
-      // Get submission with lesson info
       const submission = await prisma.lessonSubmission.findUnique({
         where: { id },
         include: {
@@ -236,14 +235,13 @@ class LectureSubmissionController extends BaseController {
             },
           },
         },
-      });
+      }) as any;
 
       if (!submission) {
         this.error(res, 'Submission not found', 404);
         return;
       }
 
-      // Verify lecture owns this course
       const lectureCourse = await prisma.lectureCourse.findFirst({
         where: {
           lectureId,
@@ -256,7 +254,6 @@ class LectureSubmissionController extends BaseController {
         return;
       }
 
-      // Update submission
       const updated = await prisma.lessonSubmission.update({
         where: { id },
         data: {
@@ -266,7 +263,6 @@ class LectureSubmissionController extends BaseController {
         },
       });
 
-      // Send notification to user
       await notificationService.createNotification({
         userId: submission.userId,
         type: 'submission_rejected',
@@ -298,7 +294,6 @@ class LectureSubmissionController extends BaseController {
         return;
       }
 
-      // Get all submissions
       const submissions = await prisma.lessonSubmission.findMany({
         where: { id: { in: submissionIds } },
         include: {
@@ -320,9 +315,8 @@ class LectureSubmissionController extends BaseController {
             },
           },
         },
-      });
+      }) as any[];
 
-      // Verify all submissions belong to lecture's courses
       const lectureCourseIds = await prisma.lectureCourse.findMany({
         where: { lectureId },
         select: { courseId: true },
@@ -338,7 +332,6 @@ class LectureSubmissionController extends BaseController {
         return;
       }
 
-      // Update all submissions
       const now = new Date();
       await prisma.lessonSubmission.updateMany({
         where: { id: { in: submissionIds } },
@@ -349,10 +342,8 @@ class LectureSubmissionController extends BaseController {
         },
       });
 
-      // Send notifications and emails to all users
       const results = [];
       for (const submission of submissions) {
-        // Create notification
         await notificationService.createNotification({
           userId: submission.userId,
           type: 'submission_approved',
@@ -360,7 +351,6 @@ class LectureSubmissionController extends BaseController {
           message: `Bài tập "${submission.lesson.title}" đã được giảng viên duyệt. Điểm: ${submission.score || 0}`,
         });
 
-        // Send email
         await emailService.sendScoreNotification(
           submission.user.email,
           submission.user.fullName || submission.user.username,

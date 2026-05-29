@@ -119,8 +119,7 @@ class PaymentService {
           success_url: `${frontendUrl}/user/payment/success?orderCode=${orderCode}&paymentId=${payment.id}&courseId=${courseId}`,
           error_url: `${frontendUrl}/user/payment/error?orderCode=${orderCode}&paymentId=${payment.id}`,
           cancel_url: `${frontendUrl}/user/payment/cancel?orderCode=${orderCode}&paymentId=${payment.id}`,
-          ipn_url: process.env.SEPAY_IPN_URL,
-        });
+        } as any);
 
         // Lấy checkout URL
         const checkoutUrl = sePayClient.checkout.initCheckoutUrl();
@@ -205,12 +204,15 @@ class PaymentService {
     // Đánh dấu activate code đã sử dụng
     await activateCodeRepository.markAsUsed(code, userId);
 
-    // Tạo enrollment
+    // Tạo enrollment với progressive unlock
+    const unlockLessonsCount = activateCode.course.unlockLessonsCount ?? 3;
     const enrollment = await enrollmentRepository.create({
       userId,
       courseId: activateCode.courseId,
       progress: 0,
-      paymentId: payment.id
+      paymentId: payment.id,
+      currentUnlocks: unlockLessonsCount,
+      completedLessons: 0
     } as any);
 
     return {
@@ -239,12 +241,21 @@ class PaymentService {
       completedAt: new Date()
     });
 
-    // Tạo enrollment
+    // Lấy course info để set unlock config
+    const courseInfo = await prisma.course.findUnique({
+      where: { id: payment.courseId },
+      select: { unlockLessonsCount: true }
+    });
+
+    // Tạo enrollment với progressive unlock
+    const unlockLessonsCount = courseInfo?.unlockLessonsCount ?? 3;
     const enrollment = await enrollmentRepository.create({
       userId: payment.userId,
       courseId: payment.courseId,
       progress: 0,
-      paymentId: payment.id
+      paymentId: payment.id,
+      currentUnlocks: unlockLessonsCount,
+      completedLessons: 0
     } as any);
 
     // Gửi email xác nhận thanh toán thành công
@@ -333,23 +344,30 @@ class PaymentService {
         console.log(`[checkPaymentStatus] PayOS status for ${payment.payosOrderId}: ${payosData.status}`);
 
         // Nếu PayOS đã thanh toán thành công
-        if (payosData.status === 'PAID' || payosData.status === 'COMPLETED') {
+        if (payosData.status === 'PAID') {
           await paymentRepository.updateStatus(payment.id, 'completed', {
-            completedAt: payosData.paidAt ? new Date(payosData.paidAt) : new Date(),
-            payosTransactionId: payosData.transactionId || undefined
+            completedAt: new Date(),
+            payosTransactionId: payosData.transactions?.[0]?.reference
           });
 
-          // Tạo enrollment
+          // Tạo enrollment với progressive unlock
           const existingEnrollment = await enrollmentRepository.findByUserIdAndCourseId(
             payment.userId,
             payment.courseId
           );
           if (!existingEnrollment) {
+            const courseInfo = await prisma.course.findUnique({
+              where: { id: payment.courseId },
+              select: { unlockLessonsCount: true }
+            });
+            const unlockLessonsCount = courseInfo?.unlockLessonsCount ?? 3;
             await enrollmentRepository.create({
               userId: payment.userId,
               courseId: payment.courseId,
               progress: 0,
-              paymentId: payment.id
+              paymentId: payment.id,
+              currentUnlocks: unlockLessonsCount,
+              completedLessons: 0
             } as any);
           }
 
@@ -568,11 +586,18 @@ class PaymentService {
     );
 
     if (!existingEnrollment) {
+      const courseInfo = await prisma.course.findUnique({
+        where: { id: payment.courseId },
+        select: { unlockLessonsCount: true }
+      });
+      const unlockLessonsCount = courseInfo?.unlockLessonsCount ?? 3;
       await enrollmentRepository.create({
         userId: payment.userId,
         courseId: payment.courseId,
         progress: 0,
-        paymentId: payment.id
+        paymentId: payment.id,
+        currentUnlocks: unlockLessonsCount,
+        completedLessons: 0
       } as any);
     }
 
@@ -628,8 +653,8 @@ class PaymentService {
     if (payment.payosOrderId) {
       try {
         const payosData = await payOS.paymentRequests.get(String(payment.payosOrderId));
-        payosStatus = payosData.status;
-        transactionId = payosData.transactionId || undefined;
+        payosStatus = payosData.status as string;
+        transactionId = payosData.transactions?.[0]?.reference || undefined;
         console.log(`[confirmPayOSPaymentById] PayOS status for ${payment.payosOrderId}: ${payosStatus}`);
       } catch (payosError: any) {
         console.error(`[confirmPayOSPaymentById] PayOS API error:`, payosError.message);
@@ -655,11 +680,18 @@ class PaymentService {
     );
 
     if (!existingEnrollment) {
+      const courseInfo = await prisma.course.findUnique({
+        where: { id: payment.courseId },
+        select: { unlockLessonsCount: true }
+      });
+      const unlockLessonsCount = courseInfo?.unlockLessonsCount ?? 3;
       await enrollmentRepository.create({
         userId: payment.userId,
         courseId: payment.courseId,
         progress: 0,
-        paymentId: payment.id
+        paymentId: payment.id,
+        currentUnlocks: unlockLessonsCount,
+        completedLessons: 0
       } as any);
     }
 
@@ -697,8 +729,7 @@ class PaymentService {
       return {
         orderCode,
         status: payosData.status,
-        amount: payosData.amount,
-        paidAt: payosData.paidAt
+        amount: payosData.amount
       };
     } catch (payosError: any) {
       throw new Error(`PayOS status check failed: ${payosError.message}`);

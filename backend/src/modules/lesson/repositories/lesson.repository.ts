@@ -31,7 +31,6 @@ class LessonRepository extends BaseRepository<Lesson> {
               include: {
                 hackathons: true,
                 projects: true,
-                minitests: true,
               }
             },
             minitests: true,
@@ -47,7 +46,7 @@ class LessonRepository extends BaseRepository<Lesson> {
    * @param phaseId - The ID of the phase to get lessons for
    * @returns Promise resolving to array of lessons sorted by order
    */
-  async findByPhaseId(phaseId: string): Promise<Lesson[]> {
+  async findByPhaseId(phaseId: string): Promise<any[]> {
     return this.model.findMany({
       where: { phaseId },
       orderBy: { orderIndex: 'asc' }

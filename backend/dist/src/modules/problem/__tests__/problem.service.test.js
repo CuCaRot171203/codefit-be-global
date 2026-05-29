@@ -1,0 +1,303 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const globals_1 = require("@jest/globals");
+class MockProblemRepository {
+    problems = new Map();
+    async create(data) {
+        const problem = {
+            id: crypto.randomUUID(),
+            title: data.title,
+            description: data.description,
+            difficulty: data.difficulty || 'easy',
+            timeLimit: data.timeLimit || 1000,
+            memoryLimit: data.memoryLimit || 256,
+            createdAt: new Date()
+        };
+        this.problems.set(problem.id, problem);
+        return problem;
+    }
+    async findById(id) {
+        return this.problems.get(id) || null;
+    }
+    async update(id, data) {
+        const problem = this.problems.get(id);
+        if (!problem)
+            throw new Error('Problem not found');
+        const updated = { ...problem, ...data };
+        this.problems.set(id, updated);
+        return updated;
+    }
+    async delete(id) {
+        this.problems.delete(id);
+    }
+    clear() {
+        this.problems.clear();
+    }
+}
+class MockTestcaseRepository {
+    testcases = new Map();
+    async create(data) {
+        const testcase = {
+            id: crypto.randomUUID(),
+            problemId: data.problemId,
+            input: data.input,
+            expectedOutput: data.expectedOutput,
+            isPublic: data.isPublic ?? false
+        };
+        this.testcases.set(testcase.id, testcase);
+        return testcase;
+    }
+    async findById(id) {
+        return this.testcases.get(id) || null;
+    }
+    async findByProblemId(problemId) {
+        return Array.from(this.testcases.values()).filter(tc => tc.problemId === problemId);
+    }
+    async findPublicByProblemId(problemId) {
+        return Array.from(this.testcases.values()).filter(tc => tc.problemId === problemId && tc.isPublic);
+    }
+    async update(id, data) {
+        const testcase = this.testcases.get(id);
+        if (!testcase)
+            throw new Error('Testcase not found');
+        const updated = { ...testcase, ...data };
+        this.testcases.set(id, updated);
+        return updated;
+    }
+    async delete(id) {
+        this.testcases.delete(id);
+    }
+    clear() {
+        this.testcases.clear();
+    }
+}
+const mockProblemRepo = new MockProblemRepository();
+const mockTestcaseRepo = new MockTestcaseRepository();
+class ProblemService {
+    repository = mockProblemRepo;
+    async create(dto) {
+        if (!dto.title || !dto.description) {
+            throw new Error('Title and description are required');
+        }
+        return this.repository.create(dto);
+    }
+    async getById(id) {
+        return this.repository.findById(id);
+    }
+    async update(id, dto) {
+        const problem = await this.repository.findById(id);
+        if (!problem) {
+            throw new Error('Problem not found');
+        }
+        return this.repository.update(id, dto);
+    }
+    async delete(id) {
+        const problem = await this.repository.findById(id);
+        if (!problem) {
+            throw new Error('Problem not found');
+        }
+        await this.repository.delete(id);
+        return { message: 'Problem deleted successfully' };
+    }
+}
+class TestcaseService {
+    repository = mockTestcaseRepo;
+    async create(dto) {
+        if (!dto.problemId || !dto.input || !dto.expectedOutput) {
+            throw new Error('problemId, input, and expectedOutput are required');
+        }
+        return this.repository.create(dto);
+    }
+    async getByProblemId(problemId) {
+        return this.repository.findByProblemId(problemId);
+    }
+    async getPublicByProblemId(problemId) {
+        return this.repository.findPublicByProblemId(problemId);
+    }
+    async update(id, dto) {
+        const testcase = await this.repository.findById(id);
+        if (!testcase) {
+            throw new Error('Testcase not found');
+        }
+        return this.repository.update(id, dto);
+    }
+    async delete(id) {
+        const testcase = await this.repository.findById(id);
+        if (!testcase) {
+            throw new Error('Testcase not found');
+        }
+        await this.repository.delete(id);
+        return { message: 'Testcase deleted successfully' };
+    }
+}
+const problemService = new ProblemService();
+const testcaseService = new TestcaseService();
+(0, globals_1.describe)('ProblemService', () => {
+    (0, globals_1.beforeEach)(() => {
+        mockProblemRepo.clear();
+    });
+    (0, globals_1.describe)('create', () => {
+        (0, globals_1.it)('should create a problem', async () => {
+            const problem = await problemService.create({
+                title: 'Two Sum',
+                description: 'Find two numbers that add up to target',
+                difficulty: 'easy'
+            });
+            (0, globals_1.expect)(problem).toBeDefined();
+            (0, globals_1.expect)(problem.title).toBe('Two Sum');
+            (0, globals_1.expect)(problem.difficulty).toBe('easy');
+        });
+        (0, globals_1.it)('should throw error when title is missing', async () => {
+            await (0, globals_1.expect)(problemService.create({ description: 'test' })).rejects.toThrow('Title and description are required');
+        });
+        (0, globals_1.it)('should throw error when description is missing', async () => {
+            await (0, globals_1.expect)(problemService.create({ title: 'test' })).rejects.toThrow('Title and description are required');
+        });
+    });
+    (0, globals_1.describe)('getById', () => {
+        (0, globals_1.it)('should return problem by id', async () => {
+            const created = await problemService.create({
+                title: 'Two Sum',
+                description: 'Find two numbers'
+            });
+            const problem = await problemService.getById(created.id);
+            (0, globals_1.expect)(problem).toBeDefined();
+            (0, globals_1.expect)(problem?.title).toBe('Two Sum');
+        });
+        (0, globals_1.it)('should return null for non-existent problem', async () => {
+            const problem = await problemService.getById('non-existent-id');
+            (0, globals_1.expect)(problem).toBeNull();
+        });
+    });
+    (0, globals_1.describe)('update', () => {
+        (0, globals_1.it)('should update problem', async () => {
+            const created = await problemService.create({
+                title: 'Two Sum',
+                description: 'Find two numbers'
+            });
+            const updated = await problemService.update(created.id, { title: 'Three Sum' });
+            (0, globals_1.expect)(updated.title).toBe('Three Sum');
+        });
+        (0, globals_1.it)('should throw error for non-existent problem', async () => {
+            await (0, globals_1.expect)(problemService.update('non-existent-id', { title: 'test' })).rejects.toThrow('Problem not found');
+        });
+    });
+    (0, globals_1.describe)('delete', () => {
+        (0, globals_1.it)('should delete problem', async () => {
+            const created = await problemService.create({
+                title: 'Two Sum',
+                description: 'Find two numbers'
+            });
+            const result = await problemService.delete(created.id);
+            (0, globals_1.expect)(result.message).toBe('Problem deleted successfully');
+            const problem = await problemService.getById(created.id);
+            (0, globals_1.expect)(problem).toBeNull();
+        });
+        (0, globals_1.it)('should throw error for non-existent problem', async () => {
+            await (0, globals_1.expect)(problemService.delete('non-existent-id')).rejects.toThrow('Problem not found');
+        });
+    });
+});
+(0, globals_1.describe)('TestcaseService', () => {
+    let testProblem;
+    (0, globals_1.beforeEach)(async () => {
+        mockTestcaseRepo.clear();
+        mockProblemRepo.clear();
+        testProblem = await problemService.create({
+            title: 'Two Sum',
+            description: 'Find two numbers'
+        });
+    });
+    (0, globals_1.describe)('create', () => {
+        (0, globals_1.it)('should create a testcase', async () => {
+            const testcase = await testcaseService.create({
+                problemId: testProblem.id,
+                input: '1 2',
+                expectedOutput: '3',
+                isPublic: true
+            });
+            (0, globals_1.expect)(testcase).toBeDefined();
+            (0, globals_1.expect)(testcase.problemId).toBe(testProblem.id);
+            (0, globals_1.expect)(testcase.isPublic).toBe(true);
+        });
+        (0, globals_1.it)('should create private testcase by default', async () => {
+            const testcase = await testcaseService.create({
+                problemId: testProblem.id,
+                input: '1 2',
+                expectedOutput: '3'
+            });
+            (0, globals_1.expect)(testcase.isPublic).toBe(false);
+        });
+        (0, globals_1.it)('should throw error when required fields missing', async () => {
+            await (0, globals_1.expect)(testcaseService.create({ problemId: testProblem.id })).rejects.toThrow('problemId, input, and expectedOutput are required');
+        });
+    });
+    (0, globals_1.describe)('getByProblemId', () => {
+        (0, globals_1.it)('should return all testcases for a problem', async () => {
+            await testcaseService.create({
+                problemId: testProblem.id,
+                input: '1 2',
+                expectedOutput: '3'
+            });
+            await testcaseService.create({
+                problemId: testProblem.id,
+                input: '4 5',
+                expectedOutput: '9'
+            });
+            const testcases = await testcaseService.getByProblemId(testProblem.id);
+            (0, globals_1.expect)(testcases).toHaveLength(2);
+        });
+        (0, globals_1.it)('should return empty array when no testcases', async () => {
+            const testcases = await testcaseService.getByProblemId(testProblem.id);
+            (0, globals_1.expect)(testcases).toHaveLength(0);
+        });
+    });
+    (0, globals_1.describe)('getPublicByProblemId', () => {
+        (0, globals_1.it)('should return only public testcases', async () => {
+            await testcaseService.create({
+                problemId: testProblem.id,
+                input: '1 2',
+                expectedOutput: '3',
+                isPublic: true
+            });
+            await testcaseService.create({
+                problemId: testProblem.id,
+                input: '4 5',
+                expectedOutput: '9',
+                isPublic: false
+            });
+            const publicTestcases = await testcaseService.getPublicByProblemId(testProblem.id);
+            (0, globals_1.expect)(publicTestcases).toHaveLength(1);
+            (0, globals_1.expect)(publicTestcases[0].isPublic).toBe(true);
+        });
+    });
+    (0, globals_1.describe)('update', () => {
+        (0, globals_1.it)('should update testcase', async () => {
+            const testcase = await testcaseService.create({
+                problemId: testProblem.id,
+                input: '1 2',
+                expectedOutput: '3'
+            });
+            const updated = await testcaseService.update(testcase.id, { isPublic: true });
+            (0, globals_1.expect)(updated.isPublic).toBe(true);
+        });
+        (0, globals_1.it)('should throw error for non-existent testcase', async () => {
+            await (0, globals_1.expect)(testcaseService.update('non-existent-id', { isPublic: true })).rejects.toThrow('Testcase not found');
+        });
+    });
+    (0, globals_1.describe)('delete', () => {
+        (0, globals_1.it)('should delete testcase', async () => {
+            const testcase = await testcaseService.create({
+                problemId: testProblem.id,
+                input: '1 2',
+                expectedOutput: '3'
+            });
+            const result = await testcaseService.delete(testcase.id);
+            (0, globals_1.expect)(result.message).toBe('Testcase deleted successfully');
+        });
+        (0, globals_1.it)('should throw error for non-existent testcase', async () => {
+            await (0, globals_1.expect)(testcaseService.delete('non-existent-id')).rejects.toThrow('Testcase not found');
+        });
+    });
+});
+//# sourceMappingURL=problem.service.test.js.map

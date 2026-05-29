@@ -176,7 +176,7 @@ class AIController {
       const userId = req.user?.userId;
 
       const conversation = await prisma.conversation.findFirst({
-        where: { id, userId },
+        where: { id: req.params.id as string, userId },
         include: {
           messages: {
             orderBy: { createdAt: 'asc' },
@@ -260,7 +260,7 @@ class AIController {
       }
 
       const conversation = await prisma.conversation.findFirst({
-        where: { id, userId },
+        where: { id: req.params.id as string, userId },
       });
 
       if (!conversation) {
@@ -268,7 +268,7 @@ class AIController {
       }
 
       await prisma.conversation.update({
-        where: { id },
+        where: { id: req.params.id as string },
         data: { title },
       });
 
@@ -289,14 +289,14 @@ class AIController {
       const userId = req.user?.userId;
 
       const conversation = await prisma.conversation.findFirst({
-        where: { id, userId },
+        where: { id: req.params.id as string, userId },
       });
 
       if (!conversation) {
         return res.status(404).json({ success: false, message: 'Conversation not found' });
       }
 
-      await prisma.conversation.delete({ where: { id } });
+      await prisma.conversation.delete({ where: { id: req.params.id as string } });
 
       return res.status(200).json({ success: true, message: 'Conversation deleted' });
     } catch (error: any) {
@@ -321,7 +321,7 @@ class AIController {
 
       // Find conversation and verify ownership
       const conversation = await prisma.conversation.findFirst({
-        where: { id, userId },
+        where: { id: req.params.id as string, userId },
         include: {
           messages: {
             orderBy: { createdAt: 'desc' },
@@ -337,7 +337,7 @@ class AIController {
       // Create user message
       const userMsg = await prisma.conversationMessage.create({
         data: {
-          conversationId: id,
+          conversationId: req.params.id as string,
           role: 'user',
           content: message,
         },
@@ -345,7 +345,7 @@ class AIController {
 
       // Update conversation updatedAt
       await prisma.conversation.update({
-        where: { id },
+        where: { id: req.params.id as string },
         data: { updatedAt: new Date() },
       });
 
@@ -365,7 +365,7 @@ class AIController {
       // Save AI response
       const assistantMsg = await prisma.conversationMessage.create({
         data: {
-          conversationId: id,
+          conversationId: req.params.id as string,
           role: 'assistant',
           content: result.response,
           suggestions: JSON.stringify(result.suggestions || []),
@@ -376,7 +376,7 @@ class AIController {
       if (conversation.title === 'Cuộc trò chuyện mới' && message.trim().length > 0) {
         const newTitle = message.trim().substring(0, 50) + (message.length > 50 ? '...' : '');
         await prisma.conversation.update({
-          where: { id },
+          where: { id: req.params.id as string },
           data: { title: newTitle },
         });
       }

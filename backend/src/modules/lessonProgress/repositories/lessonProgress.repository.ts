@@ -7,10 +7,9 @@
 
 import { PrismaClient } from '@prisma/client';
 import { BaseRepository } from '../../../base/base.repository';
-import Redis from 'ioredis';
+import { redis } from '../../../utils/redis';
 
 const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 /**
  * Interface định nghĩa cấu trúc LessonProgress
@@ -24,7 +23,7 @@ interface LessonProgress {
   /** ID của bài học */
   lessonId: string;
   /** ID của khóa học chứa bài học */
-  courseId: string;
+  courseId: string | null;
   /** Trạng thái hoàn thành */
   isCompleted: boolean;
   /** Thời điểm hoàn thành (null nếu chưa hoàn thành) */
@@ -46,7 +45,7 @@ class LessonProgressRepository extends BaseRepository<LessonProgress> {
    * @param lessonId - ID của bài học
    * @returns Promise<LessonProgress | null> - Tiến độ tìm được hoặc null
    */
-  async findByUserAndLesson(userId: string, lessonId: string): Promise<LessonProgress | null> {
+  async findByUserAndLesson(userId: string, lessonId: string): Promise<any> {
     // Bước 1: Truy vấn với unique constraint userId_lessonId
     return this.model.findUnique({
       where: {
@@ -64,7 +63,7 @@ class LessonProgressRepository extends BaseRepository<LessonProgress> {
    * @param courseId - ID của khóa học
    * @returns Promise<LessonProgress[]> - Danh sách tiến độ bài học
    */
-  async findByUserAndCourse(userId: string, courseId: string): Promise<LessonProgress[]> {
+  async findByUserAndCourse(userId: string, courseId: string): Promise<any[]> {
     // Bước 1: Truy vấn với điều kiện userId và courseId
     return this.model.findMany({
       where: { userId, courseId }
@@ -78,7 +77,7 @@ class LessonProgressRepository extends BaseRepository<LessonProgress> {
    * @param courseId - ID của khóa học
    * @returns Promise<LessonProgress> - Bản ghi tiến độ đã cập nhật/tạo mới
    */
-  async markComplete(userId: string, lessonId: string, courseId: string): Promise<LessonProgress> {
+  async markComplete(userId: string, lessonId: string, courseId: string): Promise<any> {
     // Bước 1: Kiểm tra xem đã có bản ghi tiến độ chưa
     const existing = await this.findByUserAndLesson(userId, lessonId);
 

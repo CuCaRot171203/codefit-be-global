@@ -54,10 +54,12 @@ class ProjectRepository extends BaseRepository<Project> {
    * @param userId - ID của người dùng
    * @returns Promise<Project[]> - Danh sách dự án của người dùng
    */
-  async findByUserId(userId: string): Promise<Project[]> {
-    return this.model.findMany({
+  async findByUserId(userId: string): Promise<any[]> {
+    const projectSubmissions = await prisma.projectSubmission.findMany({
       where: { userId },
+      include: { project: true },
     });
+    return projectSubmissions.map(ps => ps.project);
   }
 
   /**
@@ -65,7 +67,7 @@ class ProjectRepository extends BaseRepository<Project> {
    * @param courseId - ID của khóa học
    * @returns Promise<Project[]> - Danh sách dự án của khóa học
    */
-  async findByCourseId(courseId: string): Promise<Project[]> {
+  async findByCourseId(courseId: string): Promise<any[]> {
     return this.model.findMany({
       where: { courseId },
     });
@@ -77,10 +79,15 @@ class ProjectRepository extends BaseRepository<Project> {
    * @param courseId - ID của khóa học
    * @returns Promise<Project[]> - Danh sách dự án của người dùng trong khóa học
    */
-  async findByUserAndCourse(userId: string, courseId: string): Promise<Project[]> {
-    return this.model.findMany({
-      where: { userId, courseId },
+  async findByUserAndCourse(userId: string, courseId: string): Promise<any[]> {
+    const projectSubmissions = await prisma.projectSubmission.findMany({
+      where: { userId },
+      include: { project: true },
     });
+    return projectSubmissions
+      .filter(ps => ps.project?.courseId === courseId)
+      .map(ps => ps.project)
+      .filter(Boolean);
   }
 
   async createSubmission(data: {

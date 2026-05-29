@@ -64,7 +64,7 @@ class ScoringController extends BaseController {
   // Get user submissions for a lesson
   getMySubmissions = async (req: Request, res: Response, next: Function) => {
     try {
-      const { lessonId } = req.params;
+      const lessonId = req.params.lessonId as string;
       const userId = req.user?.userId;
 
       if (!userId) {
@@ -81,7 +81,7 @@ class ScoringController extends BaseController {
   // Get submission details
   getSubmissionDetails = async (req: Request, res: Response, next: Function) => {
     try {
-      const { submissionId } = req.params;
+      const submissionId = req.params.submissionId as string;
       const submission = await scoringService.getSubmissionById(submissionId);
 
       if (!submission) {

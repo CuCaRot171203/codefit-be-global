@@ -57,7 +57,7 @@ class HackathonRepository extends BaseRepository<Hackathon> {
    * Active = ngày bắt đầu <= ngày hiện tại <= ngày kết thúc
    * @returns Promise<Hackathon[]> Danh sách hackathon đang active
    */
-  async findActive(): Promise<Hackathon[]> {
+  async findActive(): Promise<any[]> {
     const now = new Date();
     return this.model.findMany({
       where: {
@@ -78,7 +78,7 @@ class HackathonRepository extends BaseRepository<Hackathon> {
    * Upcoming = ngày bắt đầu > ngày hiện tại
    * @returns Promise<Hackathon[]> Danh sách hackathon sắp diễn ra
    */
-  async findUpcoming(): Promise<Hackathon[]> {
+  async findUpcoming(): Promise<any[]> {
     // Bước 1: Lấy thời điểm hiện tại
     const now = new Date();
 
@@ -102,7 +102,7 @@ class HackathonRepository extends BaseRepository<Hackathon> {
    * Ended = ngày kết thúc < ngày hiện tại
    * @returns Promise<Hackathon[]> Danh sách hackathon đã kết thúc
    */
-  async findEnded(): Promise<Hackathon[]> {
+  async findEnded(): Promise<any[]> {
     const now = new Date();
     return this.model.findMany({
       where: {

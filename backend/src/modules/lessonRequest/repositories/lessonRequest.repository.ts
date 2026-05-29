@@ -110,6 +110,55 @@ class LessonRequestRepository extends BaseRepository<LessonRequest> {
     });
   }
 
+  async findLessonById(id: string) {
+    return prisma.lesson.findUnique({ where: { id } });
+  }
+
+  async findLectureById(id: string) {
+    return prisma.user.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+  }
+
+  async findAdmins() {
+    return prisma.user.findMany({
+      where: { role: { name: 'admin' } },
+    });
+  }
+
+  async updateLessonStatus(lessonId: string, status: string) {
+    return prisma.lesson.update({
+      where: { id: lessonId },
+      data: { status: status as any },
+    });
+  }
+
+  async upsertLessonContent(lessonId: string) {
+    return prisma.lessonContent.upsert({
+      where: { lessonId },
+      create: {
+        lessonId,
+        content: '',
+        testCases: '[]',
+        hints: '[]',
+      },
+      update: {},
+    });
+  }
+
+  async upsertScoringConfig(lessonId: string) {
+    return prisma.scoringConfig.upsert({
+      where: { lessonId },
+      create: {
+        lessonId,
+        baseScore: 100,
+        penaltyPerHint: 10,
+      },
+      update: {},
+    });
+  }
+
   async findPendingByLectureId(lectureId: string): Promise<LessonRequestWithDetails[]> {
     return this.model.findMany({
       where: {

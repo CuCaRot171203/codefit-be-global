@@ -17,23 +17,16 @@ class LessonRequestService extends BaseService<typeof lessonRequestRepository> {
     dueDate?: string;
     notes?: string;
   }): Promise<any> {
-    // Check if lesson exists
-    const lesson = await this.repository.model.lesson.findUnique({
-      where: { id: dto.lessonId },
-    });
+    const lesson = await this.repository.findLessonById(dto.lessonId);
     if (!lesson) {
       throw new Error('Lesson not found');
     }
 
-    // Check if lecture exists and has lecture role
-    const lecture = await this.repository.model.lecture.findUnique({
-      where: { id: dto.lectureId },
-      include: { role: true },
-    });
+    const lecture = await this.repository.findLectureById(dto.lectureId);
     if (!lecture) {
       throw new Error('Lecture user not found');
     }
-    if (lecture.role.name !== 'lecture') {
+    if (lecture.role?.name !== 'lecture') {
       throw new Error('User is not a lecture');
     }
 
@@ -118,16 +111,9 @@ class LessonRequestService extends BaseService<typeof lessonRequestRepository> {
     // Update status to SUBMITTED
     const updated = await this.repository.updateStatus(id, 'SUBMITTED');
 
-    // Update lesson status to PENDING_REVIEW
-    await this.repository.model.lesson.update({
-      where: { id: request.lessonId },
-      data: { status: 'PENDING_REVIEW' },
-    });
+    await this.repository.updateLessonStatus(request.lessonId, 'PENDING_REVIEW');
 
-    // Notify admins
-    const admins = await this.repository.model.user.findMany({
-      where: { role: { name: 'admin' } },
-    });
+    const admins = await this.repository.findAdmins();
 
     for (const admin of admins) {
       await notificationService.createNotification({
@@ -160,28 +146,9 @@ class LessonRequestService extends BaseService<typeof lessonRequestRepository> {
     // Update status to IN_PROGRESS
     const updated = await this.repository.updateStatus(id, 'IN_PROGRESS');
 
-    // Create lesson content if not exists
-    await this.repository.model.lessonContent.upsert({
-      where: { lessonId: request.lessonId },
-      create: {
-        lessonId: request.lessonId,
-        content: '',
-        testCases: '[]',
-        hints: '[]',
-      },
-      update: {},
-    });
+    await this.repository.upsertLessonContent(request.lessonId);
 
-    // Create scoring config if not exists
-    await this.repository.model.scoringConfig.upsert({
-      where: { lessonId: request.lessonId },
-      create: {
-        lessonId: request.lessonId,
-        baseScore: 100,
-        penaltyPerHint: 10,
-      },
-      update: {},
-    });
+    await this.repository.upsertScoringConfig(request.lessonId);
 
     return updated;
   }

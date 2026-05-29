@@ -92,24 +92,29 @@ app.get('/api/health', async (req: Request, res: Response) => {
 });
 
 // Test email route
-app.post('/api/test-email', async (req: Request, res: Response) => {
-  const { to, userName, courseTitle, lessonTitle } = req.body;
-  
-  if (!to) {
-    return res.status(400).json({ success: false, message: 'Email is required' });
+app.post('/api/test-email', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { to, userName, courseTitle, lessonTitle } = req.body;
+
+    if (!to) {
+      res.status(400).json({ success: false, message: 'Email is required' });
+      return;
+    }
+
+    const lessonUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/lessons/${lessonTitle}`;
+
+    await emailService.sendNewLessonNotification(
+      to,
+      userName || 'Test User',
+      courseTitle || 'Test Course',
+      lessonTitle || 'Test Lesson',
+      lessonUrl
+    );
+
+    res.json({ success: true, message: `Test email sent to ${to}` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to send email' });
   }
-
-  const lessonUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/lessons/${lessonTitle}`;
-  
-  await emailService.sendNewLessonNotification(
-    to,
-    userName || 'Test User',
-    courseTitle || 'Test Course',
-    lessonTitle || 'Test Lesson',
-    lessonUrl
-  );
-
-  res.json({ success: true, message: `Test email sent to ${to}` });
 });
 
 app.use('/api/auth', authRoutes);

@@ -7,10 +7,9 @@
 
 import { PrismaClient } from '@prisma/client';
 import { BaseRepository } from '../../../base/base.repository';
-import Redis from 'ioredis';
+import { redis } from '../../../utils/redis';
 
 const prisma = new PrismaClient();
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 /**
  * Interface định nghĩa cấu trúc LeaderboardEntry

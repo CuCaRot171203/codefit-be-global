@@ -42,19 +42,24 @@ class EnrollmentService extends BaseService<typeof enrollmentRepository> {
     // Bước 3: Lấy unlock config từ course
     const course = await prisma.course.findUnique({
       where: { id: dto.courseId },
-      select: { unlockLessonsCount: true }
+      select: { unlockLessonsCount: true, subscriptionType: true, price: true }
     });
 
     const unlockLessonsCount = course?.unlockLessonsCount ?? 3;
 
-    // Bước 4: Tạo enrollment mới với progressive unlock
+    // Bước 4: Kiểm tra khóa học miễn phí - mở khóa tất cả bài
+    const isFreeCourse = course?.subscriptionType === 'FREE' || course?.price === 0;
+    // Sử dụng giá trị cao để unlock tất cả bài cho khóa miễn phí
+    const currentUnlocks = isFreeCourse ? 999999 : unlockLessonsCount;
+
+    // Bước 5: Tạo enrollment mới với progressive unlock
     const enrollment = await this.repository.create({
       userId,
       courseId: dto.courseId,
       progress: 0,
       coachId: dto.coachId || null,
-      // Progressive unlock: mở khóa unlockLessonsCount bài đầu tiên
-      currentUnlocks: unlockLessonsCount,
+      // Progressive unlock: mở khóa tất cả bài cho khóa miễn phí, hoặc unlockLessonsCount bài cho khóa trả phí
+      currentUnlocks,
       completedLessons: 0,
     } as any);
 

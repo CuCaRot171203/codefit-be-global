@@ -94,7 +94,7 @@ class AdminRepository {
 
   async countUsersByRole() {
     return prisma.user.groupBy({
-      by: ['role'],
+      by: ['roleId'],
       _count: true,
     });
   }
@@ -596,7 +596,56 @@ class AdminRepository {
   }
 
   async deleteLesson(id: string) {
-    return prisma.lesson.delete({ where: { id } });
+    // Bước 1: Lấy thông tin lesson trước khi xóa (để biết phase và course)
+    const lesson = await prisma.lesson.findUnique({
+      where: { id },
+      include: {
+        phase: {
+          select: {
+            id: true,
+            courseId: true
+          }
+        }
+      }
+    });
+
+    if (!lesson) {
+      throw new Error('Lesson not found');
+    }
+
+    const phaseId = lesson.phase.id;
+    const courseId = lesson.phase.courseId;
+
+    // Bước 2: Lấy thông tin course để kiểm tra miễn phí
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      select: { subscriptionType: true, price: true }
+    });
+
+    const isFreeCourse = course?.subscriptionType === 'FREE' || course?.price === 0;
+
+    // Bước 3: Xóa lesson
+    await prisma.lesson.delete({ where: { id } });
+
+    // Bước 4: Đếm số bài còn lại trong phase
+    const remainingLessons = await prisma.lesson.count({
+      where: { phaseId }
+    });
+
+    // Bước 5: Cập nhật enrollments
+    // - Khóa miễn phí: giữ currentUnlocks ở giá trị cao (999999) để unlock tất cả bài
+    // - Khóa trả phí: giới hạn currentUnlocks không vượt quá số bài còn lại
+    const maxUnlocks = isFreeCourse ? 999999 : remainingLessons;
+
+    await prisma.enrollment.updateMany({
+      where: {
+        courseId,
+        currentUnlocks: { gt: maxUnlocks }
+      },
+      data: {
+        currentUnlocks: maxUnlocks
+      }
+    });
   }
 
   // ============ Testcases (cho bài học code) ============
@@ -1191,9 +1240,9 @@ class AdminRepository {
 
     // Submissions by status
     const submissionsByStatus = {
-      pending: hackathon.submissions.filter(s => s.status === 'PENDING').length,
-      graded: hackathon.submissions.filter(s => s.status === 'GRADED').length,
-      rejected: hackathon.submissions.filter(s => s.status === 'REJECTED').length,
+      pending: hackathon.submissions.filter(s => (s as any).status === 'PENDING').length,
+      graded: hackathon.submissions.filter(s => (s as any).status === 'GRADED').length,
+      rejected: hackathon.submissions.filter(s => (s as any).status === 'REJECTED').length,
     };
 
     // Submissions over time (last 7 days)
@@ -1465,8 +1514,7 @@ class AdminRepository {
     return prisma.lessonRequest.update({
       where: { id },
       data: {
-        status: 'APPROVED',
-        reviewedAt: new Date(),
+        status: 'APPROVED' as any,
       },
       include: {
         lesson: true,
@@ -1479,9 +1527,7 @@ class AdminRepository {
     return prisma.lessonRequest.update({
       where: { id },
       data: {
-        status: 'REJECTED',
-        reviewedAt: new Date(),
-        reviewNote: reason,
+        status: 'REJECTED' as any,
       },
       include: {
         lesson: true,

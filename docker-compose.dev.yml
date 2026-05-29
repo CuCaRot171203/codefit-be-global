@@ -1,0 +1,109 @@
+# Docker Compose cho CodeFit Backend - Development Mode
+# Chạy: docker compose -f docker-compose.dev.yml up -d --build
+# Sửa code → container tự restart ngay (hot-reload)
+
+services:
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: codefit_app_dev
+    restart: no
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: mysql://root:123456@mysql:3306/codefit
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-codefit-jwt-secret-key-2026}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8000}
+      IMAGEKIT_PUBLIC_KEY: public_1DNJAq0R+OOSB8QhzkU1Uy0elfc=
+      IMAGEKIT_PRIVATE_KEY: private_j0jwUaW3aR1zXujIXRlfQWtA1jY=
+      IMAGEKIT_URL_ENDPOINT: https://ik.imagekit.io/codefitedu
+      GEMINI_PROJECT_NAME: CodefitAPi
+      GEMINI_ID_PROJECT: "100679833268"
+      GEMINI_API_KEY: AIzaSyCGkOVwePTiU0Y_vCnxichnA6idSwLrEig
+      SEPAY_MERCHANT_ID: SP-LIVE-NT34BB73
+      SEPAY_SECRET_KEY: spsk_live_rQHXi9Ly1eyDGCPb1339Z2Tf9ccB6N3a
+      SEPAY_ENV: sandbox
+      SEPAY_IPN_URL: http://localhost:5001/api/payment/sepay/ipn
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: codefitedu@gmail.com
+      SMTP_PASS: qgji jali pduj wjmy
+      SMTP_FROM: CodeFit <noreply@codefit.edu.vn>
+      PAYOS_CLIENT_ID: a4707b69-2fbe-4350-9bb7-5fc742840227
+      PAYOS_API_KEY: d90cf20f-bd98-4090-b100-1b0334c99bde
+      PAYOS_CHECKSUM_KEY: 1539a176ecb10392c4c8ca9744a142ccfa30cd429c4a2cb71f8ecb1b162a0b24
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - codefit-network-dev
+    volumes:
+      - ./docker-seed-dev.sh:/docker-seed-dev.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/docker-seed-dev.sh"]
+
+  mysql:
+    build:
+      context: .
+      dockerfile: mysql/Dockerfile
+    container_name: codefit_mysql_dev
+    restart: no
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: codefit
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data_dev:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - codefit-network-dev
+
+  redis:
+    image: redis:7-alpine
+    container_name: codefit_redis_dev
+    restart: no
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data_dev:/data
+    command: redis-server --appendonly yes
+    networks:
+      - codefit-network-dev
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: codefit_rabbitmq_dev
+    restart: no
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data_dev:/var/lib/rabbitmq
+    networks:
+      - codefit-network-dev
+
+volumes:
+  mysql_data_dev:
+  redis_data_dev:
+  rabbitmq_data_dev:
+
+networks:
+  codefit-network-dev:
+    driver: bridge

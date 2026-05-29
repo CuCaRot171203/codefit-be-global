@@ -49,13 +49,10 @@ class ProgressRepository extends BaseRepository<Progress> {
     completedLessons: number,
     totalLessons: number
   ): Promise<Progress> {
-    // Bước 1: Tính toán phần trăm hoàn thành dựa trên số bài đã hoàn thành và tổng số bài
     const percentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
-    // Bước 2: Kiểm tra xem đã có record progress cho user và course này chưa
     const existing = await this.findByUserAndCourse(userId, courseId);
 
-    // Bước 3: Nếu đã có record, cập nhật record đó
     if (existing) {
       return this.model.update({
         where: { id: existing.id },
@@ -63,12 +60,10 @@ class ProgressRepository extends BaseRepository<Progress> {
           completedLessons,
           totalLessons,
           percentage,
-          updatedAt: new Date()
         }
       });
     }
 
-    // Bước 4: Nếu chưa có record, tạo mới với các giá trị được truyền vào
     return this.model.create({
       data: {
         userId,

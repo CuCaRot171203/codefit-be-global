@@ -23,48 +23,48 @@ class UserRepository extends BaseRepository<UserProfile> {
    * @param {string} email - Email của người dùng cần tìm
    * @returns {Promise<UserProfile | null>} Thông tin người dùng hoặc null nếu không tìm thấy
    */
-  async findByEmail(email: string): Promise<UserProfile | null> {
-    return this.model.findUnique({ where: { email } });
-  }
-
-  /**
-   * @method updateProfile
-   * @description Cập nhật thông tin hồ sơ người dùng
-   * @param {string} id - ID của người dùng cần cập nhật
-   * @param {any} data - Dữ liệu cập nhật (username, avatar, bio)
-   * @returns {Promise<UserProfile>} Thông tin người dùng sau khi cập nhật
-   */
-  async updateProfile(id: string, data: any): Promise<UserProfile> {
-    return this.model.update({
-      where: { id },
-      data
+  async findByEmail(email: string): Promise<any> {
+    return this.model.findUnique({
+      where: { email },
+      include: { role: true },
     });
   }
 
-  /**
-   * @method updatePassword
-   * @description Cập nhật mật khẩu người dùng
-   * @param {string} id - ID của người dùng cần đổi mật khẩu
-   * @param {string} hashedPassword - Mật khẩu đã được hash
-   * @returns {Promise<UserProfile>} Thông tin người dùng sau khi cập nhật mật khẩu
-   */
-  async updatePassword(id: string, hashedPassword: string): Promise<UserProfile> {
-    return this.model.update({
+  async findById(id: string): Promise<any> {
+    return this.model.findUnique({
       where: { id },
-      data: { password: hashedPassword }
+      include: { role: true },
     });
   }
 
-  /**
-   * @method markAsOnboarded
-   * @description Đánh dấu người dùng đã hoàn thành onboarding
-   * @param {string} id - ID của người dùng
-   * @returns {Promise<UserProfile>} Thông tin người dùng sau khi cập nhật
-   */
-  async markAsOnboarded(id: string): Promise<UserProfile> {
+  async findByIdWithPassword(id: string): Promise<any> {
+    return this.model.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+  }
+
+  async updateProfile(id: string, data: any): Promise<any> {
     return this.model.update({
       where: { id },
-      data: { isOnboarded: true }
+      data,
+      include: { role: true },
+    });
+  }
+
+  async updatePassword(id: string, hashedPassword: string): Promise<any> {
+    return this.model.update({
+      where: { id },
+      data: { password: hashedPassword },
+      include: { role: true },
+    });
+  }
+
+  async markAsOnboarded(id: string): Promise<any> {
+    return this.model.update({
+      where: { id },
+      data: { isOnboarded: true },
+      include: { role: true },
     });
   }
 }

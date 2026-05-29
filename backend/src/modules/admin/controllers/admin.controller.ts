@@ -8,6 +8,10 @@ import adminService from '../services/admin.service';
 
 class AdminController {
 
+  private strParam(val: string | string[] | undefined): string {
+    return Array.isArray(val) ? val[0] : (val || '');
+  }
+
   // ============ Dashboard ============
   getDashboardStats = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -22,7 +26,8 @@ class AdminController {
   getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { role } = req.query;
-      const users = await adminService.getAllUsers(role as string | undefined);
+      const roleStr = Array.isArray(role) ? role[0] : (role as string | undefined);
+      const users = await adminService.getAllUsers(roleStr as any);
       res.json({ success: true, data: users });
     } catch (error: any) {
       next(error);
@@ -31,7 +36,7 @@ class AdminController {
 
   getUserById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const user = await adminService.getUserById(id);
       if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
@@ -45,7 +50,7 @@ class AdminController {
 
   updateUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       console.log('Update user request:', { id, body: req.body });
       const user = await adminService.updateUser(id, req.body);
       console.log('Updated user:', user);
@@ -57,7 +62,7 @@ class AdminController {
 
   deleteUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteUser(id);
       res.json({ success: true, message: 'User deleted successfully' });
     } catch (error: any) {
@@ -77,7 +82,7 @@ class AdminController {
 
   getCourseById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const course = await adminService.getCourseById(id);
       if (!course) {
         res.status(404).json({ success: false, message: 'Course not found' });
@@ -100,7 +105,7 @@ class AdminController {
 
   updateCourse = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const course = await adminService.updateCourse(id, req.body);
       res.json({ success: true, data: course, message: 'Course updated successfully' });
     } catch (error: any) {
@@ -110,7 +115,7 @@ class AdminController {
 
   deleteCourse = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteCourse(id);
       res.json({ success: true, message: 'Course deleted successfully' });
     } catch (error: any) {
@@ -148,7 +153,7 @@ class AdminController {
 
   cancelPayment = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const payment = await adminService.cancelPayment(id);
       res.json({ success: true, data: payment, message: 'Payment cancelled successfully' });
     } catch (error: any) {
@@ -174,7 +179,7 @@ class AdminController {
         res.status(400).json({ success: false, message: 'courseId is required' });
         return;
       }
-      const code = await adminService.createActivateCode(courseId, createdBy);
+      const code = await adminService.createActivateCode(courseId, createdBy || '');
       res.status(201).json({ success: true, data: code, message: 'Activate code created successfully' });
     } catch (error: any) {
       next(error);
@@ -183,7 +188,7 @@ class AdminController {
 
   deleteActivateCode = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteActivateCode(id);
       res.json({ success: true, message: 'Activate code deleted successfully' });
     } catch (error: any) {
@@ -205,10 +210,14 @@ class AdminController {
   getAllPhases = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { courseId } = req.query;
-      const phases = courseId 
-        ? await adminService.getPhasesByCourse(courseId as string)
-        : await adminService.getAllPhases();
-      res.json({ success: true, data: phases });
+      const courseIdStr = Array.isArray(courseId) ? courseId[0] : (courseId as string | undefined);
+      if (courseIdStr) {
+        const phases = await adminService.getPhasesByCourse(courseIdStr as string);
+        res.json({ success: true, data: phases });
+      } else {
+        const phases = await adminService.getAllPhases();
+        res.json({ success: true, data: phases });
+      }
     } catch (error: any) {
       next(error);
     }
@@ -216,7 +225,7 @@ class AdminController {
 
   getPhaseById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const phases = await adminService.getPhasesByCourse(id);
       res.json({ success: true, data: phases });
     } catch (error: any) {
@@ -240,7 +249,7 @@ class AdminController {
 
   updatePhase = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const phase = await adminService.updatePhase(id, req.body);
       res.json({ success: true, data: phase, message: 'Phase updated successfully' });
     } catch (error: any) {
@@ -250,7 +259,7 @@ class AdminController {
 
   deletePhase = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deletePhase(id);
       res.json({ success: true, message: 'Phase deleted successfully' });
     } catch (error: any) {
@@ -262,10 +271,14 @@ class AdminController {
   getAllLessons = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phaseId } = req.query;
-      const lessons = phaseId 
-        ? await adminService.getLessonsByPhase(phaseId as string)
-        : await adminService.getAllLessons();
-      res.json({ success: true, data: lessons });
+      const phaseIdStr = Array.isArray(phaseId) ? phaseId[0] : (phaseId as string | undefined);
+      if (phaseIdStr) {
+        const lessons = await adminService.getLessonsByPhase(phaseIdStr as string);
+        res.json({ success: true, data: lessons });
+      } else {
+        const lessons = await adminService.getAllLessons();
+        res.json({ success: true, data: lessons });
+      }
     } catch (error: any) {
       next(error);
     }
@@ -273,7 +286,7 @@ class AdminController {
 
   getLessonById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const lesson = await adminService.getLessonById(id);
       if (!lesson) {
         res.status(404).json({ success: false, message: 'Lesson not found' });
@@ -292,7 +305,7 @@ class AdminController {
         res.status(400).json({ success: false, message: 'phaseId, title, and content are required' });
         return;
       }
-      const lesson = await adminService.createLesson({ phaseId, title, content, type, orderIndex });
+      const lesson = await adminService.createLesson({ phaseId, title, content, type, orderIndex, isPublished: true });
       res.status(201).json({ success: true, data: lesson, message: 'Lesson created successfully' });
     } catch (error: any) {
       next(error);
@@ -301,7 +314,7 @@ class AdminController {
 
   updateLesson = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const lesson = await adminService.updateLesson(id, req.body);
       res.json({ success: true, data: lesson, message: 'Lesson updated successfully' });
     } catch (error: any) {
@@ -311,7 +324,7 @@ class AdminController {
 
   deleteLesson = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteLesson(id);
       res.json({ success: true, message: 'Lesson deleted successfully' });
     } catch (error: any) {
@@ -323,7 +336,7 @@ class AdminController {
   getTestcasesByLesson = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { lessonId } = req.params;
-      const testcases = await adminService.getTestcasesByLesson(lessonId);
+      const testcases = await adminService.getTestcasesByLesson(Array.isArray(lessonId) ? lessonId[0] : lessonId);
       res.json({ success: true, data: testcases });
     } catch (error: any) {
       next(error);
@@ -353,7 +366,7 @@ class AdminController {
 
   updateTestcase = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const testcase = await adminService.updateTestcase(id, req.body);
       res.json({ success: true, data: testcase, message: 'Testcase updated successfully' });
     } catch (error: any) {
@@ -363,7 +376,7 @@ class AdminController {
 
   deleteTestcase = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteTestcase(id);
       res.json({ success: true, message: 'Testcase deleted successfully' });
     } catch (error: any) {
@@ -375,7 +388,7 @@ class AdminController {
   getLectureCourses = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { lectureId } = req.params;
-      const courses = await adminService.getLectureCourses(lectureId);
+      const courses = await adminService.getLectureCourses(Array.isArray(lectureId) ? lectureId[0] : lectureId);
       res.json({ success: true, data: courses });
     } catch (error: any) {
       next(error);
@@ -387,7 +400,11 @@ class AdminController {
       const { lectureId, courseId } = req.params;
       const assignedBy = req.user?.userId;
       console.log('[ADMIN CONTROLLER] assignCourseToLecture called:', { lectureId, courseId, assignedBy });
-      const result = await adminService.assignCourseToLecture(lectureId, courseId, assignedBy);
+      const result = await adminService.assignCourseToLecture(
+        Array.isArray(lectureId) ? lectureId[0] : lectureId,
+        Array.isArray(courseId) ? courseId[0] : courseId,
+        assignedBy
+      );
       res.status(201).json({ success: true, data: result, message: 'Course assigned to lecture successfully' });
     } catch (error: any) {
       next(error);
@@ -397,7 +414,10 @@ class AdminController {
   unassignCourseFromLecture = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { lectureId, courseId } = req.params;
-      await adminService.unassignCourseFromLecture(lectureId, courseId);
+      await adminService.unassignCourseFromLecture(
+        Array.isArray(lectureId) ? lectureId[0] : lectureId,
+        Array.isArray(courseId) ? courseId[0] : courseId
+      );
       res.json({ success: true, message: 'Course unassigned from lecture successfully' });
     } catch (error: any) {
       next(error);
@@ -408,7 +428,7 @@ class AdminController {
   getInstructorDetail = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { lectureId } = req.params;
-      const detail = await adminService.getInstructorDetail(lectureId);
+      const detail = await adminService.getInstructorDetail(Array.isArray(lectureId) ? lectureId[0] : lectureId);
       res.json({ success: true, data: detail });
     } catch (error: any) {
       if (error.message === 'Instructor not found') {
@@ -422,7 +442,7 @@ class AdminController {
   // ============ Get Lectures by Course ============
   getLecturesByCourse = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { courseId } = req.params;
+      const courseId = req.params.courseId as string;
       const lectures = await adminService.getLecturesByCourse(courseId);
       res.json({ success: true, data: lectures });
     } catch (error: any) {
@@ -442,7 +462,7 @@ class AdminController {
 
   getMinitestById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const minitest = await adminService.getMinitestById(id);
       if (!minitest) {
         res.status(404).json({ success: false, message: 'Minitest not found' });
@@ -470,7 +490,7 @@ class AdminController {
 
   updateMinitest = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const minitest = await adminService.updateMinitest(id, req.body);
       res.json({ success: true, data: minitest, message: 'Minitest updated successfully' });
     } catch (error: any) {
@@ -480,7 +500,7 @@ class AdminController {
 
   deleteMinitest = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteMinitest(id);
       res.json({ success: true, message: 'Minitest deleted successfully' });
     } catch (error: any) {
@@ -501,7 +521,7 @@ class AdminController {
   getMinitestSubmissions = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { minitestId } = req.params;
-      const submissions = await adminService.getMinitestSubmissions(minitestId);
+      const submissions = await adminService.getMinitestSubmissions(Array.isArray(minitestId) ? minitestId[0] : minitestId);
       res.json({ success: true, data: submissions });
     } catch (error: any) {
       next(error);
@@ -520,7 +540,7 @@ class AdminController {
 
   getProblemsByCourseId = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { courseId } = req.params;
+      const courseId = req.params.courseId as string;
       if (!courseId) {
         res.status(400).json({ success: false, message: 'courseId is required' });
         return;
@@ -548,7 +568,7 @@ class AdminController {
 
   updateProblem = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const problem = await adminService.updateProblem(id, req.body);
       res.json({ success: true, data: problem, message: 'Problem updated successfully' });
     } catch (error: any) {
@@ -558,7 +578,7 @@ class AdminController {
 
   deleteProblem = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteProblem(id);
       res.json({ success: true, message: 'Problem deleted successfully' });
     } catch (error: any) {
@@ -574,7 +594,10 @@ class AdminController {
         res.status(400).json({ success: false, message: 'problemId and hackathonId are required' });
         return;
       }
-      const problem = await adminService.addProblemToHackathon(problemId, hackathonId);
+      const problem = await adminService.addProblemToHackathon(
+        problemId,
+        Array.isArray(hackathonId) ? hackathonId[0] : hackathonId
+      );
       res.json({ success: true, data: problem, message: 'Problem added to hackathon successfully' });
     } catch (error: any) {
       next(error);
@@ -584,7 +607,7 @@ class AdminController {
   removeProblemFromHackathon = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { problemId } = req.params;
-      const problem = await adminService.removeProblemFromHackathon(problemId);
+      const problem = await adminService.removeProblemFromHackathon(Array.isArray(problemId) ? problemId[0] : problemId);
       res.json({ success: true, data: problem, message: 'Problem removed from hackathon successfully' });
     } catch (error: any) {
       next(error);
@@ -603,7 +626,7 @@ class AdminController {
 
   getHackathonById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const hackathon = await adminService.getHackathonById(id);
       if (!hackathon) {
         res.status(404).json({ success: false, message: 'Hackathon not found' });
@@ -643,7 +666,7 @@ class AdminController {
 
   updateHackathon = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const hackathon = await adminService.updateHackathon(id, req.body);
       res.json({ success: true, data: hackathon, message: 'Hackathon updated successfully' });
     } catch (error: any) {
@@ -653,7 +676,7 @@ class AdminController {
 
   deleteHackathon = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteHackathon(id);
       res.json({ success: true, message: 'Hackathon deleted successfully' });
     } catch (error: any) {
@@ -673,7 +696,7 @@ class AdminController {
 
   getProjectById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const project = await adminService.getProjectById(id);
       if (!project) {
         res.status(404).json({ success: false, message: 'Project not found' });
@@ -711,7 +734,7 @@ class AdminController {
 
   updateProject = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const project = await adminService.updateProject(id, req.body);
       res.json({ success: true, data: project, message: 'Project updated successfully' });
     } catch (error: any) {
@@ -721,7 +744,7 @@ class AdminController {
 
   deleteProject = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteProject(id);
       res.json({ success: true, message: 'Project deleted successfully' });
     } catch (error: any) {
@@ -731,7 +754,7 @@ class AdminController {
 
   approveProjectSubmission = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await adminService.approveProjectSubmission(id);
       res.json({ success: true, data: result, message: 'Project submission approved' });
     } catch (error: any) {
@@ -741,7 +764,7 @@ class AdminController {
 
   rejectProjectSubmission = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { reason } = req.body;
       const result = await adminService.rejectProjectSubmission(id, reason);
       res.json({ success: true, data: result, message: 'Project submission rejected' });
@@ -753,7 +776,7 @@ class AdminController {
   // ============ Lesson Requests (Admin duyệt) ============
   getLessonRequestById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const data = await adminService.getLessonRequestById(id);
       if (!data) {
         res.status(404).json({ success: false, message: 'Không tìm thấy yêu cầu' });
@@ -776,7 +799,7 @@ class AdminController {
 
   deleteLessonRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await adminService.deleteLessonRequest(id);
       res.json({ success: true, message: 'Đã xóa yêu cầu' });
     } catch (error: any) {
@@ -786,7 +809,7 @@ class AdminController {
 
   approveLessonRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await adminService.approveLessonRequest(id);
       res.json({ success: true, data: result, message: 'Lesson request approved successfully' });
     } catch (error: any) {
@@ -796,7 +819,7 @@ class AdminController {
 
   rejectLessonRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { reason } = req.body;
       const result = await adminService.rejectLessonRequest(id, reason);
       res.json({ success: true, data: result, message: 'Lesson request rejected' });

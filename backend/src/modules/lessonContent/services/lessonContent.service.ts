@@ -37,7 +37,7 @@ class LessonContentService extends BaseService<typeof lessonContentRepository.le
     }
 
     // Check if lecture owns this lesson request
-    if (lesson.lessonRequest && lesson.lessonRequest.lectureId) {
+    if ((lesson as any).lessonRequest && (lesson as any).lessonRequest.lectureId) {
       // Only allow update if lesson is in DRAFT or PENDING_REVIEW state
       if (lesson.status === 'PUBLISHED') {
         throw new Error('Cannot update published lesson');

@@ -6,12 +6,7 @@
 
 import { BaseService } from '../../../base/base.service';
 import notificationRepository from '../repositories/notification.repository';
-import Redis from 'ioredis';
-
-/**
- * Khởi tạo Redis client để publish notifications real-time.
- */
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { redis } from '../../../utils/redis';
 
 /**
  * Union type định nghĩa các loại notification có sẵn trong hệ thống.
@@ -24,16 +19,22 @@ type NotificationType =
   | 'course_update'
   | 'course_assignment'
   | 'course_unassignment'
+  | 'course_access_granted'
+  | 'course_assigned'
+  | 'course_access_with_code'
   | 'lesson_request'
   | 'lesson_submitted'
   | 'lesson_approved'
   | 'lesson_rejected'
   | 'lesson_published'
   | 'new_lesson_available'
+  | 'lessons_unlocked'
+  | 'all_lessons_unlocked'
   | 'hackathon_reminder'
   | 'hackathon_started'
   | 'hackathon_joined'
-  | 'hackathon_ranking';
+  | 'hackathon_ranking'
+  | 'certificate';
 
 /**
  * Service class xử lý business logic cho Notification.
@@ -110,12 +111,12 @@ class NotificationService extends BaseService<typeof notificationRepository> {
     const message = `Your submission has been ${statusMessage}`;
 
     // Bước 4: Gọi phương thức createNotification với type 'submission_result'
-    const notification = await this.createNotification(
+    const notification = await this.createNotification({
       userId,
-      'submission_result',
+      type: 'submission_result',
       title,
       message
-    );
+    });
 
     return notification;
   }

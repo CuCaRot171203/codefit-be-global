@@ -31,8 +31,8 @@ class PaymentRepository {
    * Tìm payment theo PayOS order ID
    */
   async findByPayosOrderId(orderId: string) {
-    return prisma.payment.findUnique({
-      where: { payosOrderId: orderId },
+    return prisma.payment.findFirst({
+      where: { payosOrderId: orderId } as any,
       include: { course: true, user: true }
     });
   }

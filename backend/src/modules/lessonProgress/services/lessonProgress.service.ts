@@ -8,10 +8,7 @@
 
 import { BaseService } from '../../../base/base.service';
 import lessonProgressRepository from '../repositories/lessonProgress.repository';
-import Redis from 'ioredis';
-
-// Khởi tạo Redis client để publish sự kiện thay đổi tiến độ
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { redis } from '../../../utils/redis';
 
 /**
  * LessonProgressService - Business logic layer cho tiến độ bài học
@@ -75,7 +72,7 @@ class LessonProgressService extends BaseService<typeof lessonProgressRepository>
     const progress = await this.repository.markIncomplete(userId, lessonId);
 
     // Bước 2: Publish sự kiện cập nhật tiến độ lên Redis
-    await this.publishLessonUpdate(userId, lessonId, progress.courseId, false);
+    await this.publishLessonUpdate(userId, lessonId, progress.courseId || '', false);
 
     // Bước 3: Trả về bản ghi tiến độ đã cập nhật
     return progress;
@@ -92,7 +89,7 @@ class LessonProgressService extends BaseService<typeof lessonProgressRepository>
     const progressList = await this.repository.findByUserAndCourse(userId, courseId);
     
     // Bước 2: Đếm số bài học có completed = true
-    return progressList.filter(p => p.completed).length;
+    return progressList.filter(p => p.isCompleted).length;
   }
 
   /**

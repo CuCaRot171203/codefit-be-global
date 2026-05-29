@@ -6,9 +6,7 @@
 
 import { BaseService } from '../../../base/base.service';
 import progressRepository from '../repositories/progress.repository';
-import Redis from 'ioredis';
-
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { redis } from '../../../utils/redis';
 
 /**
  * Service class xử lý business logic liên quan đến progress

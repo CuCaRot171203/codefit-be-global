@@ -51,9 +51,7 @@ class StatsController {
   async getCourseStats(req: Request, res: Response, next: NextFunction) {
     try {
       // Bước 1: Lấy courseId từ URL params
-      const { courseId } = req.params;
-      
-      // Bước 2: Gọi service để lấy thống kê khóa học
+      const courseId = req.params.courseId as string;
       const stats = await statsService.getCourseStats(courseId);
       
       // Bước 3: Trả về response với thông tin thống kê
@@ -193,6 +191,20 @@ class StatsController {
         return;
       }
       const data = await statsService.getUserEvaluation(userId);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  async getActivity30Days(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+      const data = await statsService.getActivity30Days(userId);
       res.json({ success: true, data });
     } catch (error: any) {
       next(error);

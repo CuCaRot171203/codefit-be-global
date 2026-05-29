@@ -368,7 +368,8 @@ class SubmissionService extends BaseService<typeof submissionRepository> {
         id: r.id,
         testcaseId: r.testcaseId,
         status: r.status,
-        runtime: r.runtime
+        runtime: r.runtime,
+        submissionId: submission.id
       }))
     };
   }
