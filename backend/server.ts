@@ -70,6 +70,7 @@ app.use(cors({
     'http://localhost:8000',
     'http://localhost:8001',
     'http://localhost:3000',
+    "https://codefit-fe-global.pages.dev"
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
