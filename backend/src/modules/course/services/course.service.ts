@@ -149,6 +149,9 @@ class CourseService extends BaseService<typeof courseRepository> {
     if ((dto as any).includes !== undefined) {
       updateData.includes = (dto as any).includes;
     }
+    if ((dto as any).isFreeCourse !== undefined) {
+      updateData.isFreeCourse = (dto as any).isFreeCourse;
+    }
 
     // Bước 3: Gọi repository để cập nhật record trong database
     const updated = await this.repository.update(id, updateData);

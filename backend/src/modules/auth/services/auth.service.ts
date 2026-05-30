@@ -5,6 +5,13 @@ import { BaseService } from '../../../base/base.service';
 import authRepository from '../repositories/auth.repository';
 import { RegisterDto, LoginDto, AuthResponse, User } from '../types/auth.types';
 
+export interface GoogleUserData {
+  googleId: string;
+  email: string;
+  username: string;
+  avatar?: string | null;
+}
+
 const prisma = new PrismaClient();
 
 /**
@@ -110,7 +117,7 @@ class AuthService extends BaseService<typeof authRepository> {
    * @param user - User object từ database
    * @returns AuthResponse với user info và token
    */
-  private formatUserResponse(user: any): AuthResponse {
+  formatUserResponse(user: any): AuthResponse {
     const token = this.generateToken(user.id, user.roleId, user.role?.name || 'user');
 
     return {
@@ -149,6 +156,51 @@ class AuthService extends BaseService<typeof authRepository> {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Find or create user from Google OAuth
+   * @param GoogleUserData - googleId, email, username, avatar
+   * @returns AuthResponse với user info và JWT token
+   */
+  async findOrCreateGoogleUser({ googleId, email, username, avatar }: GoogleUserData): Promise<AuthResponse> {
+    let user = await prisma.user.findUnique({
+      where: { email },
+      include: { role: true },
+    });
+
+    if (!user) {
+      const defaultRole = await prisma.role.findUnique({
+        where: { name: 'user' },
+      });
+      if (!defaultRole) {
+        throw new Error('Default role not found. Please run seed first.');
+      }
+
+      const randomPassword = await bcrypt.hash(Math.random().toString(36), 10);
+
+      user = await prisma.user.create({
+        data: {
+          email,
+          username,
+          password: randomPassword,
+          roleId: defaultRole.id,
+          avatar,
+          fullName: username,
+        },
+        include: { role: true },
+      });
+    } else {
+      if (avatar && user.avatar !== avatar) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { avatar },
+          include: { role: true },
+        });
+      }
+    }
+
+    return this.formatUserResponse(user);
   }
 }
 

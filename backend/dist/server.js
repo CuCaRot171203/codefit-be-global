@@ -36,7 +36,7 @@ module.exports = __toCommonJS(server_exports);
 var import_config = require("dotenv/config");
 var import_fs = __toESM(require("fs"));
 var import_path = __toESM(require("path"));
-var import_express30 = __toESM(require("express"));
+var import_express31 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 
 // src/prisma.ts
@@ -45,7 +45,7 @@ var prisma = new import_client.PrismaClient();
 var prisma_default = prisma;
 
 // src/modules/auth/routes/auth.routes.ts
-var import_express = require("express");
+var import_express2 = require("express");
 
 // src/base/base.controller.ts
 var BaseController = class {
@@ -293,6 +293,46 @@ var AuthService = class extends BaseService {
       return null;
     }
   }
+  /**
+   * Find or create user from Google OAuth
+   * @param GoogleUserData - googleId, email, username, avatar
+   * @returns AuthResponse với user info và JWT token
+   */
+  async findOrCreateGoogleUser({ googleId, email, username, avatar }) {
+    let user = await prisma3.user.findUnique({
+      where: { email },
+      include: { role: true }
+    });
+    if (!user) {
+      const defaultRole = await prisma3.role.findUnique({
+        where: { name: "user" }
+      });
+      if (!defaultRole) {
+        throw new Error("Default role not found. Please run seed first.");
+      }
+      const randomPassword = await import_bcrypt.default.hash(Math.random().toString(36), 10);
+      user = await prisma3.user.create({
+        data: {
+          email,
+          username,
+          password: randomPassword,
+          roleId: defaultRole.id,
+          avatar,
+          fullName: username
+        },
+        include: { role: true }
+      });
+    } else {
+      if (avatar && user.avatar !== avatar) {
+        user = await prisma3.user.update({
+          where: { id: user.id },
+          data: { avatar },
+          include: { role: true }
+        });
+      }
+    }
+    return this.formatUserResponse(user);
+  }
 };
 var auth_service_default = new AuthService();
 
@@ -438,15 +478,174 @@ var requireLectureOrAdmin = (req, res, next) => {
   next();
 };
 
-// src/modules/auth/routes/auth.routes.ts
+// src/modules/auth/routes/google.routes.ts
+var import_express = require("express");
+
+// src/modules/auth/config/google.config.ts
+var import_passport = __toESM(require("passport"));
+var import_passport_google_oauth20 = require("passport-google-oauth20");
+var GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+var GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+var GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || "http://localhost:5000/api/auth/google/callback";
+if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+  import_passport.default.use(
+    new import_passport_google_oauth20.Strategy(
+      {
+        clientID: GOOGLE_CLIENT_ID,
+        clientSecret: GOOGLE_CLIENT_SECRET,
+        callbackURL: GOOGLE_CALLBACK_URL,
+        scope: ["profile", "email"]
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          const googleUser = profile;
+          const email = googleUser.emails?.[0]?.value;
+          const displayName = googleUser.displayName || googleUser.username || "User";
+          const avatar = googleUser.photos?.[0]?.value;
+          if (!email) {
+            return done(new Error("No email provided by Google"), void 0);
+          }
+          const user = await auth_service_default.findOrCreateGoogleUser({
+            googleId: googleUser.id,
+            email,
+            username: displayName,
+            avatar
+          });
+          return done(null, user);
+        } catch (error) {
+          return done(error, void 0);
+        }
+      }
+    )
+  );
+  import_passport.default.serializeUser((user, done) => {
+    done(null, user.id);
+  });
+  import_passport.default.deserializeUser(async (id, done) => {
+    try {
+      const user = await auth_service_default.getUserById(id);
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+  console.log("Google OAuth strategy initialized");
+}
+var google_config_default = import_passport.default;
+
+// src/modules/auth/controllers/google.controller.ts
+var GoogleAuthController = class {
+  /**
+   * Redirect to Google OAuth
+   * GET /api/auth/google
+   */
+  authGoogle = (req, res, next) => {
+    google_config_default.authenticate("google", {
+      scope: ["profile", "email"],
+      session: false
+    })(req, res, next);
+  };
+  /**
+   * Google OAuth Callback
+   * GET /api/auth/google/callback
+   */
+  googleCallback = (req, res, next) => {
+    google_config_default.authenticate("google", {
+      session: false,
+      failureRedirect: `${process.env.FRONTEND_URL || "http://localhost:3000"}/dang-nhap?error=google_auth_failed`
+    }, (err, user) => {
+      if (err) {
+        console.error("Google OAuth error:", err);
+        return res.redirect(
+          `${process.env.FRONTEND_URL || "http://localhost:3000"}/dang-nhap?error=google_auth_failed`
+        );
+      }
+      if (!user) {
+        return res.redirect(
+          `${process.env.FRONTEND_URL || "http://localhost:3000"}/dang-nhap?error=no_user_data`
+        );
+      }
+      const authResponse = auth_service_default.formatUserResponse(user);
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const redirectUrl = new URL(`${frontendUrl}/auth/google/success`);
+      redirectUrl.searchParams.set("token", authResponse.token);
+      redirectUrl.searchParams.set("user", JSON.stringify(authResponse.user));
+      return res.redirect(redirectUrl.toString());
+    })(req, res, next);
+  };
+  /**
+   * Handle Google ID token from frontend
+   * POST /api/auth/google/verify
+   * Alternative flow: Frontend receives credential, sends to backend for verification
+   */
+  verifyGoogleToken = async (req, res, next) => {
+    try {
+      const { googleToken } = req.body;
+      if (!googleToken) {
+        res.status(400).json({ message: "Google token is required" });
+        return;
+      }
+      const https = await import("https");
+      const googleApiUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${googleToken}`;
+      const response = await new Promise((resolve, reject) => {
+        https.get(googleApiUrl, (res2) => {
+          let data = "";
+          res2.on("data", (chunk) => {
+            data += chunk;
+          });
+          res2.on("end", () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch {
+              reject(new Error("Invalid response from Google"));
+            }
+          });
+        }).on("error", reject);
+      });
+      if (response.error) {
+        res.status(401).json({ message: "Invalid Google token", error: response.error });
+        return;
+      }
+      const { email, name, picture, sub: googleId } = response;
+      if (!email) {
+        res.status(400).json({ message: "No email in Google token" });
+        return;
+      }
+      const authResponse = await auth_service_default.findOrCreateGoogleUser({
+        googleId,
+        email,
+        username: name || email.split("@")[0],
+        avatar: picture
+      });
+      res.json({
+        success: true,
+        data: authResponse
+      });
+    } catch (error) {
+      console.error("Google token verification error:", error);
+      res.status(500).json({ message: "Failed to verify Google token", error: error.message });
+    }
+  };
+};
+var google_controller_default = new GoogleAuthController();
+
+// src/modules/auth/routes/google.routes.ts
 var router = (0, import_express.Router)();
-router.post("/register", (req, res, next) => auth_controller_default.register(req, res, next));
-router.post("/login", (req, res, next) => auth_controller_default.login(req, res, next));
-router.get("/me", verifyToken, (req, res, next) => auth_controller_default.getMe(req, res, next));
-var auth_routes_default = router;
+router.get("/", (req, res, next) => google_controller_default.authGoogle(req, res, next));
+router.get("/callback", (req, res, next) => google_controller_default.googleCallback(req, res, next));
+router.post("/verify", (req, res, next) => google_controller_default.verifyGoogleToken(req, res, next));
+var google_routes_default = router;
+
+// src/modules/auth/routes/auth.routes.ts
+var router2 = (0, import_express2.Router)();
+router2.post("/register", (req, res, next) => auth_controller_default.register(req, res, next));
+router2.post("/login", (req, res, next) => auth_controller_default.login(req, res, next));
+router2.get("/me", verifyToken, (req, res, next) => auth_controller_default.getMe(req, res, next));
+router2.use("/google", google_routes_default);
+var auth_routes_default = router2;
 
 // src/modules/submission/routes/submission.routes.ts
-var import_express2 = require("express");
+var import_express3 = require("express");
 
 // src/modules/submission/repositories/submission.repository.ts
 var import_client4 = require("@prisma/client");
@@ -1385,15 +1584,15 @@ var SubmissionController = class extends BaseController {
 var submission_controller_default = new SubmissionController();
 
 // src/modules/submission/routes/submission.routes.ts
-var router2 = (0, import_express2.Router)();
-router2.post("/", verifyToken, (req, res, next) => submission_controller_default.createSubmission(req, res, next));
-router2.get("/my", verifyToken, (req, res, next) => submission_controller_default.getSubmissionsByUserId(req, res, next));
-router2.get("/", verifyToken, (req, res, next) => submission_controller_default.getSubmissionsByUserId(req, res, next));
-router2.get("/:id", verifyToken, (req, res, next) => submission_controller_default.getSubmissionById(req, res, next));
-var submission_routes_default = router2;
+var router3 = (0, import_express3.Router)();
+router3.post("/", verifyToken, (req, res, next) => submission_controller_default.createSubmission(req, res, next));
+router3.get("/my", verifyToken, (req, res, next) => submission_controller_default.getSubmissionsByUserId(req, res, next));
+router3.get("/", verifyToken, (req, res, next) => submission_controller_default.getSubmissionsByUserId(req, res, next));
+router3.get("/:id", verifyToken, (req, res, next) => submission_controller_default.getSubmissionById(req, res, next));
+var submission_routes_default = router3;
 
 // src/modules/user/routes/user.routes.ts
-var import_express3 = require("express");
+var import_express4 = require("express");
 
 // src/modules/user/services/user.service.ts
 var import_bcrypt2 = __toESM(require("bcrypt"));
@@ -1581,15 +1780,15 @@ var UserController = class extends BaseController {
 var user_controller_default = new UserController();
 
 // src/modules/user/routes/user.routes.ts
-var router3 = (0, import_express3.Router)();
-router3.use(verifyToken);
-router3.get("/profile", (req, res, next) => user_controller_default.getProfile(req, res, next));
-router3.put("/profile", (req, res, next) => user_controller_default.updateProfile(req, res, next));
-router3.post("/change-password", (req, res, next) => user_controller_default.changePassword(req, res, next));
-var user_routes_default = router3;
+var router4 = (0, import_express4.Router)();
+router4.use(verifyToken);
+router4.get("/profile", (req, res, next) => user_controller_default.getProfile(req, res, next));
+router4.put("/profile", (req, res, next) => user_controller_default.updateProfile(req, res, next));
+router4.post("/change-password", (req, res, next) => user_controller_default.changePassword(req, res, next));
+var user_routes_default = router4;
 
 // src/modules/course/routes/course.routes.ts
-var import_express4 = require("express");
+var import_express5 = require("express");
 
 // src/modules/course/repositories/course.repository.ts
 var import_client9 = require("@prisma/client");
@@ -1764,6 +1963,9 @@ var CourseService = class extends BaseService {
     if (dto.includes !== void 0) {
       updateData.includes = dto.includes;
     }
+    if (dto.isFreeCourse !== void 0) {
+      updateData.isFreeCourse = dto.isFreeCourse;
+    }
     const updated = await this.repository.update(id, updateData);
     return { ...updated, phases: [] };
   }
@@ -1918,17 +2120,17 @@ var CourseController = class extends BaseController {
 var course_controller_default = new CourseController();
 
 // src/modules/course/routes/course.routes.ts
-var router4 = (0, import_express4.Router)();
-router4.get("/", (req, res, next) => course_controller_default.getAll(req, res, next));
-router4.get("/:id", (req, res, next) => course_controller_default.getById(req, res, next));
-router4.post("/", verifyToken, (req, res, next) => course_controller_default.create(req, res, next));
-router4.put("/:id", verifyToken, (req, res, next) => course_controller_default.update(req, res, next));
-router4.delete("/:id", verifyToken, (req, res, next) => course_controller_default.delete(req, res, next));
-router4.get("/my/creator", verifyToken, (req, res, next) => course_controller_default.getByCreator(req, res, next));
-var course_routes_default = router4;
+var router5 = (0, import_express5.Router)();
+router5.get("/", (req, res, next) => course_controller_default.getAll(req, res, next));
+router5.get("/:id", (req, res, next) => course_controller_default.getById(req, res, next));
+router5.post("/", verifyToken, (req, res, next) => course_controller_default.create(req, res, next));
+router5.put("/:id", verifyToken, (req, res, next) => course_controller_default.update(req, res, next));
+router5.delete("/:id", verifyToken, (req, res, next) => course_controller_default.delete(req, res, next));
+router5.get("/my/creator", verifyToken, (req, res, next) => course_controller_default.getByCreator(req, res, next));
+var course_routes_default = router5;
 
 // src/modules/phase/routes/phase.routes.ts
-var import_express5 = require("express");
+var import_express6 = require("express");
 
 // src/modules/phase/repositories/phase.repository.ts
 var import_client10 = require("@prisma/client");
@@ -2138,16 +2340,16 @@ var PhaseController = class extends BaseController {
 var phase_controller_default = new PhaseController();
 
 // src/modules/phase/routes/phase.routes.ts
-var router5 = (0, import_express5.Router)();
-router5.post("/", (req, res, next) => phase_controller_default.create(req, res, next));
-router5.get("/course/:courseId", (req, res, next) => phase_controller_default.getByCourseId(req, res, next));
-router5.get("/:id", (req, res, next) => phase_controller_default.getById(req, res, next));
-router5.put("/:id", (req, res, next) => phase_controller_default.update(req, res, next));
-router5.delete("/:id", (req, res, next) => phase_controller_default.delete(req, res, next));
-var phase_routes_default = router5;
+var router6 = (0, import_express6.Router)();
+router6.post("/", (req, res, next) => phase_controller_default.create(req, res, next));
+router6.get("/course/:courseId", (req, res, next) => phase_controller_default.getByCourseId(req, res, next));
+router6.get("/:id", (req, res, next) => phase_controller_default.getById(req, res, next));
+router6.put("/:id", (req, res, next) => phase_controller_default.update(req, res, next));
+router6.delete("/:id", (req, res, next) => phase_controller_default.delete(req, res, next));
+var phase_routes_default = router6;
 
 // src/modules/lesson/routes/lesson.routes.ts
-var import_express6 = require("express");
+var import_express7 = require("express");
 
 // src/modules/lesson/repositories/lesson.repository.ts
 var import_client11 = require("@prisma/client");
@@ -2389,16 +2591,16 @@ var LessonController = class extends BaseController {
 var lesson_controller_default = new LessonController();
 
 // src/modules/lesson/routes/lesson.routes.ts
-var router6 = (0, import_express6.Router)();
-router6.post("/", (req, res, next) => lesson_controller_default.create(req, res, next));
-router6.get("/phase/:phaseId", (req, res, next) => lesson_controller_default.getByPhaseId(req, res, next));
-router6.get("/:id", (req, res, next) => lesson_controller_default.getById(req, res, next));
-router6.put("/:id", (req, res, next) => lesson_controller_default.update(req, res, next));
-router6.delete("/:id", (req, res, next) => lesson_controller_default.delete(req, res, next));
-var lesson_routes_default = router6;
+var router7 = (0, import_express7.Router)();
+router7.post("/", (req, res, next) => lesson_controller_default.create(req, res, next));
+router7.get("/phase/:phaseId", (req, res, next) => lesson_controller_default.getByPhaseId(req, res, next));
+router7.get("/:id", (req, res, next) => lesson_controller_default.getById(req, res, next));
+router7.put("/:id", (req, res, next) => lesson_controller_default.update(req, res, next));
+router7.delete("/:id", (req, res, next) => lesson_controller_default.delete(req, res, next));
+var lesson_routes_default = router7;
 
 // src/modules/enrollment/routes/enrollment.routes.ts
-var import_express7 = require("express");
+var import_express8 = require("express");
 
 // src/modules/enrollment/repositories/enrollment.repository.ts
 var import_client12 = require("@prisma/client");
@@ -2732,17 +2934,17 @@ var EnrollmentController = class extends BaseController {
 var enrollment_controller_default = new EnrollmentController();
 
 // src/modules/enrollment/routes/enrollment.routes.ts
-var router7 = (0, import_express7.Router)();
-router7.post("/", verifyToken, (req, res, next) => enrollment_controller_default.enroll(req, res, next));
-router7.get("/my", verifyToken, (req, res, next) => enrollment_controller_default.getMyEnrollments(req, res, next));
-router7.get("/", verifyToken, (req, res, next) => enrollment_controller_default.getMyEnrollments(req, res, next));
-router7.get("/:courseId", verifyToken, (req, res, next) => enrollment_controller_default.getEnrollment(req, res, next));
-router7.put("/:enrollmentId/progress", verifyToken, (req, res, next) => enrollment_controller_default.updateProgress(req, res, next));
-router7.delete("/:courseId", verifyToken, (req, res, next) => enrollment_controller_default.unenroll(req, res, next));
-var enrollment_routes_default = router7;
+var router8 = (0, import_express8.Router)();
+router8.post("/", verifyToken, (req, res, next) => enrollment_controller_default.enroll(req, res, next));
+router8.get("/my", verifyToken, (req, res, next) => enrollment_controller_default.getMyEnrollments(req, res, next));
+router8.get("/", verifyToken, (req, res, next) => enrollment_controller_default.getMyEnrollments(req, res, next));
+router8.get("/:courseId", verifyToken, (req, res, next) => enrollment_controller_default.getEnrollment(req, res, next));
+router8.put("/:enrollmentId/progress", verifyToken, (req, res, next) => enrollment_controller_default.updateProgress(req, res, next));
+router8.delete("/:courseId", verifyToken, (req, res, next) => enrollment_controller_default.unenroll(req, res, next));
+var enrollment_routes_default = router8;
 
 // src/modules/problem/routes/problem.routes.ts
-var import_express8 = require("express");
+var import_express9 = require("express");
 
 // src/modules/problem/services/problem.service.ts
 var ProblemService = class extends BaseService {
@@ -2952,17 +3154,17 @@ var ProblemController = class extends BaseController {
 var problem_controller_default = new ProblemController();
 
 // src/modules/problem/routes/problem.routes.ts
-var router8 = (0, import_express8.Router)();
-router8.post("/", (req, res, next) => problem_controller_default.create(req, res, next));
-router8.get("/", (req, res, next) => problem_controller_default.getAll(req, res, next));
-router8.get("/:id", (req, res, next) => problem_controller_default.getById(req, res, next));
-router8.get("/:problemId/testcases/public", (req, res, next) => problem_controller_default.getPublicTestcases(req, res, next));
-router8.put("/:id", (req, res, next) => problem_controller_default.update(req, res, next));
-router8.delete("/:id", (req, res, next) => problem_controller_default.delete(req, res, next));
-var problem_routes_default = router8;
+var router9 = (0, import_express9.Router)();
+router9.post("/", (req, res, next) => problem_controller_default.create(req, res, next));
+router9.get("/", (req, res, next) => problem_controller_default.getAll(req, res, next));
+router9.get("/:id", (req, res, next) => problem_controller_default.getById(req, res, next));
+router9.get("/:problemId/testcases/public", (req, res, next) => problem_controller_default.getPublicTestcases(req, res, next));
+router9.put("/:id", (req, res, next) => problem_controller_default.update(req, res, next));
+router9.delete("/:id", (req, res, next) => problem_controller_default.delete(req, res, next));
+var problem_routes_default = router9;
 
 // src/modules/testcase/routes/testcase.routes.ts
-var import_express9 = require("express");
+var import_express10 = require("express");
 
 // src/modules/testcase/repositories/testcase.repository.ts
 var import_client13 = require("@prisma/client");
@@ -3202,17 +3404,17 @@ var TestcaseController = class extends BaseController {
 var testcase_controller_default = new TestcaseController();
 
 // src/modules/testcase/routes/testcase.routes.ts
-var router9 = (0, import_express9.Router)();
-router9.post("/", (req, res, next) => testcase_controller_default.create(req, res, next));
-router9.get("/problem/:problemId", (req, res, next) => testcase_controller_default.getByProblemId(req, res, next));
-router9.get("/problem/:problemId/public", (req, res, next) => testcase_controller_default.getPublicByProblemId(req, res, next));
-router9.get("/:id", (req, res, next) => testcase_controller_default.getById(req, res, next));
-router9.put("/:id", (req, res, next) => testcase_controller_default.update(req, res, next));
-router9.delete("/:id", (req, res, next) => testcase_controller_default.delete(req, res, next));
-var testcase_routes_default = router9;
+var router10 = (0, import_express10.Router)();
+router10.post("/", (req, res, next) => testcase_controller_default.create(req, res, next));
+router10.get("/problem/:problemId", (req, res, next) => testcase_controller_default.getByProblemId(req, res, next));
+router10.get("/problem/:problemId/public", (req, res, next) => testcase_controller_default.getPublicByProblemId(req, res, next));
+router10.get("/:id", (req, res, next) => testcase_controller_default.getById(req, res, next));
+router10.put("/:id", (req, res, next) => testcase_controller_default.update(req, res, next));
+router10.delete("/:id", (req, res, next) => testcase_controller_default.delete(req, res, next));
+var testcase_routes_default = router10;
 
 // src/modules/progress/routes/progress.routes.ts
-var import_express10 = require("express");
+var import_express11 = require("express");
 
 // src/modules/progress/controllers/progress.controller.ts
 var ProgressController = class extends BaseController {
@@ -3275,14 +3477,14 @@ var ProgressController = class extends BaseController {
 var progress_controller_default = new ProgressController();
 
 // src/modules/progress/routes/progress.routes.ts
-var router10 = (0, import_express10.Router)();
-router10.use(verifyToken);
-router10.get("/:courseId", (req, res, next) => progress_controller_default.getProgress(req, res, next));
-router10.put("/:courseId", (req, res, next) => progress_controller_default.updateProgress(req, res, next));
-var progress_routes_default = router10;
+var router11 = (0, import_express11.Router)();
+router11.use(verifyToken);
+router11.get("/:courseId", (req, res, next) => progress_controller_default.getProgress(req, res, next));
+router11.put("/:courseId", (req, res, next) => progress_controller_default.updateProgress(req, res, next));
+var progress_routes_default = router11;
 
 // src/modules/lessonProgress/routes/lessonProgress.routes.ts
-var import_express11 = require("express");
+var import_express12 = require("express");
 
 // src/modules/lessonProgress/repositories/lessonProgress.repository.ts
 var import_client14 = require("@prisma/client");
@@ -3589,16 +3791,16 @@ var LessonProgressController = class extends BaseController {
 var lessonProgress_controller_default = new LessonProgressController();
 
 // src/modules/lessonProgress/routes/lessonProgress.routes.ts
-var router11 = (0, import_express11.Router)();
-router11.use(verifyToken);
-router11.get("/lesson/:lessonId", (req, res, next) => lessonProgress_controller_default.getLessonProgress(req, res, next));
-router11.get("/course/:courseId", (req, res, next) => lessonProgress_controller_default.getCourseProgress(req, res, next));
-router11.post("/complete", (req, res, next) => lessonProgress_controller_default.markComplete(req, res, next));
-router11.put("/lesson/:lessonId/incomplete", (req, res, next) => lessonProgress_controller_default.markIncomplete(req, res, next));
-var lessonProgress_routes_default = router11;
+var router12 = (0, import_express12.Router)();
+router12.use(verifyToken);
+router12.get("/lesson/:lessonId", (req, res, next) => lessonProgress_controller_default.getLessonProgress(req, res, next));
+router12.get("/course/:courseId", (req, res, next) => lessonProgress_controller_default.getCourseProgress(req, res, next));
+router12.post("/complete", (req, res, next) => lessonProgress_controller_default.markComplete(req, res, next));
+router12.put("/lesson/:lessonId/incomplete", (req, res, next) => lessonProgress_controller_default.markIncomplete(req, res, next));
+var lessonProgress_routes_default = router12;
 
 // src/modules/notification/routes/notification.routes.ts
-var import_express12 = require("express");
+var import_express13 = require("express");
 
 // src/modules/notification/controllers/notification.controller.ts
 var NotificationController = class extends BaseController {
@@ -3787,21 +3989,21 @@ var NotificationController = class extends BaseController {
 var notification_controller_default = new NotificationController();
 
 // src/modules/notification/routes/notification.routes.ts
-var router12 = (0, import_express12.Router)();
-router12.post("/", (req, res, next) => notification_controller_default.createNotification(req, res, next));
-router12.use(verifyToken);
-router12.get("/", (req, res, next) => notification_controller_default.getMyNotifications(req, res, next));
-router12.get("/unread", (req, res, next) => notification_controller_default.getUnread(req, res, next));
-router12.get("/unread/count", (req, res, next) => notification_controller_default.getUnreadCount(req, res, next));
-router12.put("/:id/read", (req, res, next) => notification_controller_default.markAsRead(req, res, next));
-router12.put("/read-all", (req, res, next) => notification_controller_default.markAllAsRead(req, res, next));
-router12.get("/sent", (req, res, next) => notification_controller_default.getSentNotifications(req, res, next));
-router12.get("/all", (req, res, next) => notification_controller_default.getAllNotifications(req, res, next));
-router12.delete("/:id", (req, res, next) => notification_controller_default.delete(req, res, next));
-var notification_routes_default = router12;
+var router13 = (0, import_express13.Router)();
+router13.post("/", (req, res, next) => notification_controller_default.createNotification(req, res, next));
+router13.use(verifyToken);
+router13.get("/", (req, res, next) => notification_controller_default.getMyNotifications(req, res, next));
+router13.get("/unread", (req, res, next) => notification_controller_default.getUnread(req, res, next));
+router13.get("/unread/count", (req, res, next) => notification_controller_default.getUnreadCount(req, res, next));
+router13.put("/:id/read", (req, res, next) => notification_controller_default.markAsRead(req, res, next));
+router13.put("/read-all", (req, res, next) => notification_controller_default.markAllAsRead(req, res, next));
+router13.get("/sent", (req, res, next) => notification_controller_default.getSentNotifications(req, res, next));
+router13.get("/all", (req, res, next) => notification_controller_default.getAllNotifications(req, res, next));
+router13.delete("/:id", (req, res, next) => notification_controller_default.delete(req, res, next));
+var notification_routes_default = router13;
 
 // src/modules/minitest/routes/minitest.routes.ts
-var import_express13 = require("express");
+var import_express14 = require("express");
 
 // src/modules/minitest/services/minitest.service.ts
 var MinitestService = class {
@@ -4602,17 +4804,17 @@ var MinitestController = class extends BaseController {
 var minitest_controller_default = new MinitestController();
 
 // src/modules/minitest/routes/minitest.routes.ts
-var router13 = (0, import_express13.Router)();
-router13.post("/", (req, res, next) => minitest_controller_default.create(req, res, next));
-router13.get("/:id", (req, res, next) => minitest_controller_default.getById(req, res, next));
-router13.get("/course/:courseId", (req, res, next) => minitest_controller_default.getByCourseId(req, res, next));
-router13.post("/:id/submit", verifyToken, (req, res, next) => minitest_controller_default.submit(req, res, next));
-router13.get("/:id/result", verifyToken, (req, res, next) => minitest_controller_default.getResult(req, res, next));
-router13.get("/my/results", verifyToken, (req, res, next) => minitest_controller_default.getMyResults(req, res, next));
-var minitest_routes_default = router13;
+var router14 = (0, import_express14.Router)();
+router14.post("/", (req, res, next) => minitest_controller_default.create(req, res, next));
+router14.get("/:id", (req, res, next) => minitest_controller_default.getById(req, res, next));
+router14.get("/course/:courseId", (req, res, next) => minitest_controller_default.getByCourseId(req, res, next));
+router14.post("/:id/submit", verifyToken, (req, res, next) => minitest_controller_default.submit(req, res, next));
+router14.get("/:id/result", verifyToken, (req, res, next) => minitest_controller_default.getResult(req, res, next));
+router14.get("/my/results", verifyToken, (req, res, next) => minitest_controller_default.getMyResults(req, res, next));
+var minitest_routes_default = router14;
 
 // src/modules/hackathon/routes/hackathon.routes.ts
-var import_express14 = require("express");
+var import_express15 = require("express");
 
 // src/modules/hackathon/repositories/hackathon.repository.ts
 var import_client15 = require("@prisma/client");
@@ -6367,26 +6569,26 @@ var HackathonController = class extends BaseController {
 var hackathon_controller_default = new HackathonController();
 
 // src/modules/hackathon/routes/hackathon.routes.ts
-var router14 = (0, import_express14.Router)();
-router14.post("/", verifyToken, (req, res, next) => hackathon_controller_default.create(req, res, next));
-router14.get("/active", (req, res, next) => hackathon_controller_default.getActive(req, res, next));
-router14.get("/upcoming", (req, res, next) => hackathon_controller_default.getUpcoming(req, res, next));
-router14.get("/ended", (req, res, next) => hackathon_controller_default.getEnded(req, res, next));
-router14.get("/registered", verifyToken, (req, res, next) => hackathon_controller_default.getRegistered(req, res, next));
-router14.get("/:id", (req, res, next) => hackathon_controller_default.getById(req, res, next));
-router14.get("/:id/leaderboard", (req, res, next) => hackathon_controller_default.getLeaderboard(req, res, next));
-router14.post("/:id/join", verifyToken, (req, res, next) => hackathon_controller_default.join(req, res, next));
-router14.get("/:id/participants", (req, res, next) => hackathon_controller_default.getParticipants(req, res, next));
-router14.post("/:id/submit", verifyToken, (req, res, next) => hackathon_controller_default.submitProject(req, res, next));
-router14.get("/:id/submissions", (req, res, next) => hackathon_controller_default.getSubmissions(req, res, next));
-router14.put("/submissions/:submissionId/grade", verifyToken, (req, res, next) => hackathon_controller_default.gradeSubmission(req, res, next));
-router14.post("/:id/run-problem", verifyToken, (req, res, next) => hackathon_controller_default.runProblem(req, res, next));
-router14.post("/:id/submit-problem", verifyToken, (req, res, next) => hackathon_controller_default.submitProblem(req, res, next));
-router14.get("/:id/problems", verifyToken, (req, res, next) => hackathon_controller_default.getProblems(req, res, next));
-var hackathon_routes_default = router14;
+var router15 = (0, import_express15.Router)();
+router15.post("/", verifyToken, (req, res, next) => hackathon_controller_default.create(req, res, next));
+router15.get("/active", (req, res, next) => hackathon_controller_default.getActive(req, res, next));
+router15.get("/upcoming", (req, res, next) => hackathon_controller_default.getUpcoming(req, res, next));
+router15.get("/ended", (req, res, next) => hackathon_controller_default.getEnded(req, res, next));
+router15.get("/registered", verifyToken, (req, res, next) => hackathon_controller_default.getRegistered(req, res, next));
+router15.get("/:id", (req, res, next) => hackathon_controller_default.getById(req, res, next));
+router15.get("/:id/leaderboard", (req, res, next) => hackathon_controller_default.getLeaderboard(req, res, next));
+router15.post("/:id/join", verifyToken, (req, res, next) => hackathon_controller_default.join(req, res, next));
+router15.get("/:id/participants", (req, res, next) => hackathon_controller_default.getParticipants(req, res, next));
+router15.post("/:id/submit", verifyToken, (req, res, next) => hackathon_controller_default.submitProject(req, res, next));
+router15.get("/:id/submissions", (req, res, next) => hackathon_controller_default.getSubmissions(req, res, next));
+router15.put("/submissions/:submissionId/grade", verifyToken, (req, res, next) => hackathon_controller_default.gradeSubmission(req, res, next));
+router15.post("/:id/run-problem", verifyToken, (req, res, next) => hackathon_controller_default.runProblem(req, res, next));
+router15.post("/:id/submit-problem", verifyToken, (req, res, next) => hackathon_controller_default.submitProblem(req, res, next));
+router15.get("/:id/problems", verifyToken, (req, res, next) => hackathon_controller_default.getProblems(req, res, next));
+var hackathon_routes_default = router15;
 
 // src/modules/leaderboard/routes/leaderboard.routes.ts
-var import_express15 = require("express");
+var import_express16 = require("express");
 
 // src/modules/leaderboard/repositories/leaderboard.repository.ts
 var import_client19 = require("@prisma/client");
@@ -6616,14 +6818,14 @@ var LeaderboardController = class extends BaseController {
 var leaderboard_controller_default = new LeaderboardController();
 
 // src/modules/leaderboard/routes/leaderboard.routes.ts
-var router15 = (0, import_express15.Router)();
-router15.get("/", (req, res, next) => leaderboard_controller_default.getGlobal(req, res, next));
-router15.get("/course/:courseId", (req, res, next) => leaderboard_controller_default.getCourseLeaderboard(req, res, next));
-router15.get("/my-rank", verifyToken, (req, res, next) => leaderboard_controller_default.getMyRank(req, res, next));
-var leaderboard_routes_default = router15;
+var router16 = (0, import_express16.Router)();
+router16.get("/", (req, res, next) => leaderboard_controller_default.getGlobal(req, res, next));
+router16.get("/course/:courseId", (req, res, next) => leaderboard_controller_default.getCourseLeaderboard(req, res, next));
+router16.get("/my-rank", verifyToken, (req, res, next) => leaderboard_controller_default.getMyRank(req, res, next));
+var leaderboard_routes_default = router16;
 
 // src/modules/project/routes/project.routes.ts
-var import_express16 = require("express");
+var import_express17 = require("express");
 
 // src/modules/project/repositories/project.repository.ts
 var import_client20 = require("@prisma/client");
@@ -7183,18 +7385,18 @@ var ProjectController = class extends BaseController {
 var project_controller_default = new ProjectController();
 
 // src/modules/project/routes/project.routes.ts
-var router16 = (0, import_express16.Router)();
-router16.post("/", verifyToken, (req, res, next) => project_controller_default.create(req, res, next));
-router16.post("/submit", verifyToken, (req, res, next) => project_controller_default.submitProject(req, res, next));
-router16.get("/my", verifyToken, (req, res, next) => project_controller_default.getMyProjects(req, res, next));
-router16.get("/course/:courseId", (req, res, next) => project_controller_default.getCourseProjects(req, res, next));
-router16.get("/:id", (req, res, next) => project_controller_default.getById(req, res, next));
-router16.put("/:id", verifyToken, (req, res, next) => project_controller_default.update(req, res, next));
-router16.delete("/:id", verifyToken, (req, res, next) => project_controller_default.delete(req, res, next));
-var project_routes_default = router16;
+var router17 = (0, import_express17.Router)();
+router17.post("/", verifyToken, (req, res, next) => project_controller_default.create(req, res, next));
+router17.post("/submit", verifyToken, (req, res, next) => project_controller_default.submitProject(req, res, next));
+router17.get("/my", verifyToken, (req, res, next) => project_controller_default.getMyProjects(req, res, next));
+router17.get("/course/:courseId", (req, res, next) => project_controller_default.getCourseProjects(req, res, next));
+router17.get("/:id", (req, res, next) => project_controller_default.getById(req, res, next));
+router17.put("/:id", verifyToken, (req, res, next) => project_controller_default.update(req, res, next));
+router17.delete("/:id", verifyToken, (req, res, next) => project_controller_default.delete(req, res, next));
+var project_routes_default = router17;
 
 // src/modules/certificate/routes/certificate.routes.ts
-var import_express17 = require("express");
+var import_express18 = require("express");
 
 // src/modules/certificate/controllers/certificate.controller.ts
 var CertificateController = class extends BaseController {
@@ -7292,15 +7494,15 @@ var CertificateController = class extends BaseController {
 var certificate_controller_default = new CertificateController();
 
 // src/modules/certificate/routes/certificate.routes.ts
-var router17 = (0, import_express17.Router)();
-router17.get("/my", verifyToken, (req, res, next) => certificate_controller_default.getMyCertificates(req, res, next));
-router17.get("/course/:courseId", verifyToken, (req, res, next) => certificate_controller_default.getCertificate(req, res, next));
-router17.post("/generate", verifyToken, (req, res, next) => certificate_controller_default.generate(req, res, next));
-router17.get("/verify/:certificateId", (req, res, next) => certificate_controller_default.verify(req, res, next));
-var certificate_routes_default = router17;
+var router18 = (0, import_express18.Router)();
+router18.get("/my", verifyToken, (req, res, next) => certificate_controller_default.getMyCertificates(req, res, next));
+router18.get("/course/:courseId", verifyToken, (req, res, next) => certificate_controller_default.getCertificate(req, res, next));
+router18.post("/generate", verifyToken, (req, res, next) => certificate_controller_default.generate(req, res, next));
+router18.get("/verify/:certificateId", (req, res, next) => certificate_controller_default.verify(req, res, next));
+var certificate_routes_default = router18;
 
 // src/modules/feedback/routes/feedback.routes.ts
-var import_express18 = require("express");
+var import_express19 = require("express");
 
 // src/modules/feedback/repositories/feedback.repository.ts
 var import_client23 = require("@prisma/client");
@@ -7455,14 +7657,14 @@ var FeedbackController = class extends BaseController {
 var feedback_controller_default = new FeedbackController();
 
 // src/modules/feedback/routes/feedback.routes.ts
-var router18 = (0, import_express18.Router)();
-router18.post("/", verifyToken, (req, res, next) => feedback_controller_default.create(req, res, next));
-router18.get("/", (req, res, next) => feedback_controller_default.getAll(req, res, next));
-router18.delete("/:id", verifyToken, (req, res, next) => feedback_controller_default.delete(req, res, next));
-var feedback_routes_default = router18;
+var router19 = (0, import_express19.Router)();
+router19.post("/", verifyToken, (req, res, next) => feedback_controller_default.create(req, res, next));
+router19.get("/", (req, res, next) => feedback_controller_default.getAll(req, res, next));
+router19.delete("/:id", verifyToken, (req, res, next) => feedback_controller_default.delete(req, res, next));
+var feedback_routes_default = router19;
 
 // src/modules/stats/routes/stats.routes.ts
-var import_express19 = require("express");
+var import_express20 = require("express");
 
 // src/modules/stats/repositories/stats.repository.ts
 var import_client24 = require("@prisma/client");
@@ -8491,23 +8693,23 @@ var StatsController = class {
 var stats_controller_default = new StatsController();
 
 // src/modules/stats/routes/stats.routes.ts
-var router19 = (0, import_express19.Router)();
-router19.get("/me", verifyToken, (req, res, next) => stats_controller_default.getMyStats(req, res, next));
-router19.get("/course/:courseId", (req, res, next) => stats_controller_default.getCourseStats(req, res, next));
-router19.get("/platform", (req, res, next) => stats_controller_default.getPlatformStats(req, res, next));
-router19.get("/weekly-comparison", verifyToken, (req, res, next) => stats_controller_default.getWeeklyComparison(req, res, next));
-router19.get("/score-breakdown", verifyToken, (req, res, next) => stats_controller_default.getScoreBreakdown(req, res, next));
-router19.get("/login-days", verifyToken, (req, res, next) => stats_controller_default.getLoginDays(req, res, next));
-router19.get("/weekly-activity", verifyToken, (req, res, next) => stats_controller_default.getWeeklyActivity(req, res, next));
-router19.get("/global-rank", verifyToken, (req, res, next) => stats_controller_default.getGlobalRank(req, res, next));
-router19.get("/global-leaderboard", (req, res, next) => stats_controller_default.getGlobalLeaderboard(req, res, next));
-router19.get("/enrolled-courses", verifyToken, (req, res, next) => stats_controller_default.getEnrolledCourses(req, res, next));
-router19.get("/evaluation", verifyToken, (req, res, next) => stats_controller_default.getEvaluation(req, res, next));
-router19.get("/activity-30-days", verifyToken, (req, res, next) => stats_controller_default.getActivity30Days(req, res, next));
-var stats_routes_default = router19;
+var router20 = (0, import_express20.Router)();
+router20.get("/me", verifyToken, (req, res, next) => stats_controller_default.getMyStats(req, res, next));
+router20.get("/course/:courseId", (req, res, next) => stats_controller_default.getCourseStats(req, res, next));
+router20.get("/platform", (req, res, next) => stats_controller_default.getPlatformStats(req, res, next));
+router20.get("/weekly-comparison", verifyToken, (req, res, next) => stats_controller_default.getWeeklyComparison(req, res, next));
+router20.get("/score-breakdown", verifyToken, (req, res, next) => stats_controller_default.getScoreBreakdown(req, res, next));
+router20.get("/login-days", verifyToken, (req, res, next) => stats_controller_default.getLoginDays(req, res, next));
+router20.get("/weekly-activity", verifyToken, (req, res, next) => stats_controller_default.getWeeklyActivity(req, res, next));
+router20.get("/global-rank", verifyToken, (req, res, next) => stats_controller_default.getGlobalRank(req, res, next));
+router20.get("/global-leaderboard", (req, res, next) => stats_controller_default.getGlobalLeaderboard(req, res, next));
+router20.get("/enrolled-courses", verifyToken, (req, res, next) => stats_controller_default.getEnrolledCourses(req, res, next));
+router20.get("/evaluation", verifyToken, (req, res, next) => stats_controller_default.getEvaluation(req, res, next));
+router20.get("/activity-30-days", verifyToken, (req, res, next) => stats_controller_default.getActivity30Days(req, res, next));
+var stats_routes_default = router20;
 
 // src/modules/upload/routes/upload.routes.ts
-var import_express20 = require("express");
+var import_express21 = require("express");
 
 // src/services/imagekit.service.ts
 var import_imagekit = __toESM(require("imagekit"));
@@ -8571,11 +8773,11 @@ var uploadSingleImage = uploadMiddleware.single("image");
 var uploadMultipleImages = uploadMiddleware.array("images", 10);
 
 // src/modules/upload/routes/upload.routes.ts
-var router20 = (0, import_express20.Router)();
+var router21 = (0, import_express21.Router)();
 var asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
-router20.post(
+router21.post(
   "/",
   verifyToken,
   uploadMiddleware.single("file"),
@@ -8596,7 +8798,7 @@ router20.post(
     });
   })
 );
-router20.post(
+router21.post(
   "/image",
   verifyToken,
   uploadMiddleware.single("image"),
@@ -8617,7 +8819,7 @@ router20.post(
     });
   })
 );
-router20.post(
+router21.post(
   "/images",
   verifyToken,
   uploadMiddleware.array("images", 10),
@@ -8642,10 +8844,10 @@ router20.post(
     });
   })
 );
-var upload_routes_default = router20;
+var upload_routes_default = router21;
 
 // src/modules/payment/routes/payment.routes.ts
-var import_express21 = require("express");
+var import_express22 = require("express");
 
 // src/modules/payment/services/payment.service.ts
 var import_sepay_pg_node = require("sepay-pg-node");
@@ -9715,73 +9917,73 @@ var PaymentController = class extends BaseController {
 var payment_controller_default = new PaymentController();
 
 // src/modules/payment/routes/payment.routes.ts
-var router21 = (0, import_express21.Router)();
-router21.post(
+var router22 = (0, import_express22.Router)();
+router22.post(
   "/create",
   verifyToken,
   (req, res, next) => payment_controller_default.createPayment(req, res, next)
 );
-router21.post(
+router22.post(
   "/activate",
   verifyToken,
   (req, res, next) => payment_controller_default.activateWithCode(req, res, next)
 );
-router21.get(
+router22.get(
   "/my",
   verifyToken,
   (req, res, next) => payment_controller_default.getMyPayments(req, res, next)
 );
-router21.get(
+router22.get(
   "/:id/status",
   verifyToken,
   (req, res, next) => payment_controller_default.checkPaymentStatus(req, res, next)
 );
-router21.post(
+router22.post(
   "/:id/cancel",
   verifyToken,
   (req, res, next) => payment_controller_default.cancelPayment(req, res, next)
 );
-router21.get(
+router22.get(
   "/:id",
   verifyToken,
   (req, res, next) => payment_controller_default.getPayment(req, res, next)
 );
-router21.post(
+router22.post(
   "/sepay/ipn",
   (req, res, next) => payment_controller_default.sepayIpn(req, res, next)
 );
-router21.post(
+router22.post(
   "/sepay/callback",
   (req, res, next) => payment_controller_default.sepayCallback(req, res, next)
 );
-router21.post(
+router22.post(
   "/admin/create-code",
   verifyToken,
   (req, res, next) => payment_controller_default.createActivateCode(req, res, next)
 );
-router21.post(
+router22.post(
   "/payos/create",
   verifyToken,
   (req, res, next) => payment_controller_default.createPayOSPaymentLink(req, res, next)
 );
-router21.post(
+router22.post(
   "/payos/cancel-payment",
   verifyToken,
   (req, res, next) => payment_controller_default.cancelPayOSPayment(req, res, next)
 );
-router21.post(
+router22.post(
   "/payos/webhook",
   (req, res, next) => payment_controller_default.payosWebhook(req, res, next)
 );
-router21.post(
+router22.post(
   "/payos/confirm",
   verifyToken,
   (req, res, next) => payment_controller_default.confirmPayOSPayment(req, res, next)
 );
-var payment_routes_default = router21;
+var payment_routes_default = router22;
 
 // src/modules/admin/routes/admin.routes.ts
-var import_express22 = require("express");
+var import_express23 = require("express");
 
 // src/modules/admin/repositories/admin.repository.ts
 var AdminRepository = class {
@@ -12309,81 +12511,81 @@ var AdminController = class {
 var admin_controller_default = new AdminController();
 
 // src/modules/admin/routes/admin.routes.ts
-var router22 = (0, import_express22.Router)();
-router22.use(verifyToken);
-router22.use(requireAdmin);
-router22.get("/dashboard/stats", admin_controller_default.getDashboardStats);
-router22.get("/users", admin_controller_default.getAllUsers);
-router22.get("/users/:id", admin_controller_default.getUserById);
-router22.put("/users/:id", admin_controller_default.updateUser);
-router22.delete("/users/:id", admin_controller_default.deleteUser);
-router22.get("/lectures/:lectureId/courses", admin_controller_default.getLectureCourses);
-router22.post("/lectures/:lectureId/courses/:courseId", admin_controller_default.assignCourseToLecture);
-router22.delete("/lectures/:lectureId/courses/:courseId", admin_controller_default.unassignCourseFromLecture);
-router22.get("/courses/:courseId/lectures", admin_controller_default.getLecturesByCourse);
-router22.get("/lectures/:lectureId/detail", admin_controller_default.getInstructorDetail);
-router22.get("/courses", admin_controller_default.getAllCourses);
-router22.get("/courses/:id", admin_controller_default.getCourseById);
-router22.post("/courses", admin_controller_default.createCourse);
-router22.put("/courses/:id", admin_controller_default.updateCourse);
-router22.delete("/courses/:id", admin_controller_default.deleteCourse);
-router22.get("/payments", admin_controller_default.getAllPayments);
-router22.get("/payments/stats", admin_controller_default.getPaymentStats);
-router22.get("/payments/revenue", admin_controller_default.getRevenueByMonth);
-router22.patch("/payments/:id/cancel", admin_controller_default.cancelPayment);
-router22.get("/activate-codes", admin_controller_default.getAllActivateCodes);
-router22.post("/activate-codes", admin_controller_default.createActivateCode);
-router22.delete("/activate-codes/:id", admin_controller_default.deleteActivateCode);
-router22.get("/enrollments", admin_controller_default.getAllEnrollments);
-router22.get("/phases", admin_controller_default.getAllPhases);
-router22.get("/phases/:id", admin_controller_default.getPhaseById);
-router22.post("/phases", admin_controller_default.createPhase);
-router22.put("/phases/:id", admin_controller_default.updatePhase);
-router22.delete("/phases/:id", admin_controller_default.deletePhase);
-router22.get("/lessons", admin_controller_default.getAllLessons);
-router22.get("/lessons/:id", admin_controller_default.getLessonById);
-router22.post("/lessons", admin_controller_default.createLesson);
-router22.put("/lessons/:id", admin_controller_default.updateLesson);
-router22.delete("/lessons/:id", admin_controller_default.deleteLesson);
-router22.get("/lessons/:lessonId/testcases", admin_controller_default.getTestcasesByLesson);
-router22.post("/lessons/:lessonId/testcases", admin_controller_default.createTestcase);
-router22.put("/testcases/:id", admin_controller_default.updateTestcase);
-router22.delete("/testcases/:id", admin_controller_default.deleteTestcase);
-router22.get("/minitests/stats", admin_controller_default.getMinitestStats);
-router22.get("/minitests", admin_controller_default.getAllMinitests);
-router22.get("/minitests/:id", admin_controller_default.getMinitestById);
-router22.get("/minitests/:minitestId/submissions", admin_controller_default.getMinitestSubmissions);
-router22.post("/minitests", admin_controller_default.createMinitest);
-router22.put("/minitests/:id", admin_controller_default.updateMinitest);
-router22.delete("/minitests/:id", admin_controller_default.deleteMinitest);
-router22.get("/problems", admin_controller_default.getAllProblems);
-router22.get("/courses/:courseId/problems", admin_controller_default.getProblemsByCourseId);
-router22.post("/problems", admin_controller_default.createProblem);
-router22.put("/problems/:id", admin_controller_default.updateProblem);
-router22.delete("/problems/:id", admin_controller_default.deleteProblem);
-router22.post("/hackathons/:hackathonId/problems", admin_controller_default.addProblemToHackathon);
-router22.delete("/hackathons/:hackathonId/problems/:problemId", admin_controller_default.removeProblemFromHackathon);
-router22.get("/hackathons", admin_controller_default.getAllHackathons);
-router22.get("/hackathons/:id", admin_controller_default.getHackathonById);
-router22.post("/hackathons", admin_controller_default.createHackathon);
-router22.put("/hackathons/:id", admin_controller_default.updateHackathon);
-router22.delete("/hackathons/:id", admin_controller_default.deleteHackathon);
-router22.get("/projects", admin_controller_default.getAllProjects);
-router22.get("/projects/:id", admin_controller_default.getProjectById);
-router22.post("/projects", admin_controller_default.createProject);
-router22.put("/projects/:id", admin_controller_default.updateProject);
-router22.delete("/projects/:id", admin_controller_default.deleteProject);
-router22.put("/projects/:id/approve", admin_controller_default.approveProjectSubmission);
-router22.put("/projects/:id/reject", admin_controller_default.rejectProjectSubmission);
-router22.get("/lesson-requests", admin_controller_default.getAllLessonRequests);
-router22.get("/lesson-requests/:id", admin_controller_default.getLessonRequestById);
-router22.delete("/lesson-requests/:id", admin_controller_default.deleteLessonRequest);
-router22.put("/lesson-requests/:id/approve", admin_controller_default.approveLessonRequest);
-router22.put("/lesson-requests/:id/reject", admin_controller_default.rejectLessonRequest);
-var admin_routes_default = router22;
+var router23 = (0, import_express23.Router)();
+router23.use(verifyToken);
+router23.use(requireAdmin);
+router23.get("/dashboard/stats", admin_controller_default.getDashboardStats);
+router23.get("/users", admin_controller_default.getAllUsers);
+router23.get("/users/:id", admin_controller_default.getUserById);
+router23.put("/users/:id", admin_controller_default.updateUser);
+router23.delete("/users/:id", admin_controller_default.deleteUser);
+router23.get("/lectures/:lectureId/courses", admin_controller_default.getLectureCourses);
+router23.post("/lectures/:lectureId/courses/:courseId", admin_controller_default.assignCourseToLecture);
+router23.delete("/lectures/:lectureId/courses/:courseId", admin_controller_default.unassignCourseFromLecture);
+router23.get("/courses/:courseId/lectures", admin_controller_default.getLecturesByCourse);
+router23.get("/lectures/:lectureId/detail", admin_controller_default.getInstructorDetail);
+router23.get("/courses", admin_controller_default.getAllCourses);
+router23.get("/courses/:id", admin_controller_default.getCourseById);
+router23.post("/courses", admin_controller_default.createCourse);
+router23.put("/courses/:id", admin_controller_default.updateCourse);
+router23.delete("/courses/:id", admin_controller_default.deleteCourse);
+router23.get("/payments", admin_controller_default.getAllPayments);
+router23.get("/payments/stats", admin_controller_default.getPaymentStats);
+router23.get("/payments/revenue", admin_controller_default.getRevenueByMonth);
+router23.patch("/payments/:id/cancel", admin_controller_default.cancelPayment);
+router23.get("/activate-codes", admin_controller_default.getAllActivateCodes);
+router23.post("/activate-codes", admin_controller_default.createActivateCode);
+router23.delete("/activate-codes/:id", admin_controller_default.deleteActivateCode);
+router23.get("/enrollments", admin_controller_default.getAllEnrollments);
+router23.get("/phases", admin_controller_default.getAllPhases);
+router23.get("/phases/:id", admin_controller_default.getPhaseById);
+router23.post("/phases", admin_controller_default.createPhase);
+router23.put("/phases/:id", admin_controller_default.updatePhase);
+router23.delete("/phases/:id", admin_controller_default.deletePhase);
+router23.get("/lessons", admin_controller_default.getAllLessons);
+router23.get("/lessons/:id", admin_controller_default.getLessonById);
+router23.post("/lessons", admin_controller_default.createLesson);
+router23.put("/lessons/:id", admin_controller_default.updateLesson);
+router23.delete("/lessons/:id", admin_controller_default.deleteLesson);
+router23.get("/lessons/:lessonId/testcases", admin_controller_default.getTestcasesByLesson);
+router23.post("/lessons/:lessonId/testcases", admin_controller_default.createTestcase);
+router23.put("/testcases/:id", admin_controller_default.updateTestcase);
+router23.delete("/testcases/:id", admin_controller_default.deleteTestcase);
+router23.get("/minitests/stats", admin_controller_default.getMinitestStats);
+router23.get("/minitests", admin_controller_default.getAllMinitests);
+router23.get("/minitests/:id", admin_controller_default.getMinitestById);
+router23.get("/minitests/:minitestId/submissions", admin_controller_default.getMinitestSubmissions);
+router23.post("/minitests", admin_controller_default.createMinitest);
+router23.put("/minitests/:id", admin_controller_default.updateMinitest);
+router23.delete("/minitests/:id", admin_controller_default.deleteMinitest);
+router23.get("/problems", admin_controller_default.getAllProblems);
+router23.get("/courses/:courseId/problems", admin_controller_default.getProblemsByCourseId);
+router23.post("/problems", admin_controller_default.createProblem);
+router23.put("/problems/:id", admin_controller_default.updateProblem);
+router23.delete("/problems/:id", admin_controller_default.deleteProblem);
+router23.post("/hackathons/:hackathonId/problems", admin_controller_default.addProblemToHackathon);
+router23.delete("/hackathons/:hackathonId/problems/:problemId", admin_controller_default.removeProblemFromHackathon);
+router23.get("/hackathons", admin_controller_default.getAllHackathons);
+router23.get("/hackathons/:id", admin_controller_default.getHackathonById);
+router23.post("/hackathons", admin_controller_default.createHackathon);
+router23.put("/hackathons/:id", admin_controller_default.updateHackathon);
+router23.delete("/hackathons/:id", admin_controller_default.deleteHackathon);
+router23.get("/projects", admin_controller_default.getAllProjects);
+router23.get("/projects/:id", admin_controller_default.getProjectById);
+router23.post("/projects", admin_controller_default.createProject);
+router23.put("/projects/:id", admin_controller_default.updateProject);
+router23.delete("/projects/:id", admin_controller_default.deleteProject);
+router23.put("/projects/:id/approve", admin_controller_default.approveProjectSubmission);
+router23.put("/projects/:id/reject", admin_controller_default.rejectProjectSubmission);
+router23.get("/lesson-requests", admin_controller_default.getAllLessonRequests);
+router23.get("/lesson-requests/:id", admin_controller_default.getLessonRequestById);
+router23.delete("/lesson-requests/:id", admin_controller_default.deleteLessonRequest);
+router23.put("/lesson-requests/:id/approve", admin_controller_default.approveLessonRequest);
+router23.put("/lesson-requests/:id/reject", admin_controller_default.rejectLessonRequest);
+var admin_routes_default = router23;
 
 // src/modules/lecture/routes/lecture.routes.ts
-var import_express23 = require("express");
+var import_express24 = require("express");
 
 // src/modules/lecture/repositories/lecture.repository.ts
 var import_client28 = require("@prisma/client");
@@ -13630,57 +13832,57 @@ var LectureSubmissionController = class extends BaseController {
 var lectureSubmission_controller_default = new LectureSubmissionController();
 
 // src/modules/lecture/routes/lecture.routes.ts
-var router23 = (0, import_express23.Router)();
-router23.use(verifyToken);
-router23.get("/dashboard", requireLectureOrAdmin, (req, res, next) => {
+var router24 = (0, import_express24.Router)();
+router24.use(verifyToken);
+router24.get("/dashboard", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.getDashboard(req, res, next);
 });
-router23.get("/courses", requireLectureOrAdmin, (req, res, next) => {
+router24.get("/courses", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.getMyCourses(req, res, next);
 });
-router23.get("/courses/:courseId", requireLectureOrAdmin, (req, res, next) => {
+router24.get("/courses/:courseId", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.getCourseDetail(req, res, next);
 });
-router23.get("/minitests", requireLectureOrAdmin, (req, res, next) => {
+router24.get("/minitests", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.getMyMinitests(req, res, next);
 });
-router23.get("/hackathons", requireLectureOrAdmin, (req, res, next) => {
+router24.get("/hackathons", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.getMyHackathons(req, res, next);
 });
-router23.get("/submissions", requireLectureOrAdmin, (req, res, next) => {
+router24.get("/submissions", requireLectureOrAdmin, (req, res, next) => {
   lectureSubmission_controller_default.getSubmissions(req, res, next);
 });
-router23.post("/submissions/:id/approve", requireLectureOrAdmin, (req, res, next) => {
+router24.post("/submissions/:id/approve", requireLectureOrAdmin, (req, res, next) => {
   lectureSubmission_controller_default.approveSubmission(req, res, next);
 });
-router23.post("/submissions/:id/reject", requireLectureOrAdmin, (req, res, next) => {
+router24.post("/submissions/:id/reject", requireLectureOrAdmin, (req, res, next) => {
   lectureSubmission_controller_default.rejectSubmission(req, res, next);
 });
-router23.post("/submissions/bulk-approve", requireLectureOrAdmin, (req, res, next) => {
+router24.post("/submissions/bulk-approve", requireLectureOrAdmin, (req, res, next) => {
   lectureSubmission_controller_default.bulkApprove(req, res, next);
 });
-router23.post("/phases", requireLectureOrAdmin, (req, res, next) => {
+router24.post("/phases", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.createPhase(req, res, next);
 });
-router23.post("/lessons", requireLectureOrAdmin, (req, res, next) => {
+router24.post("/lessons", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.createLesson(req, res, next);
 });
-router23.get("/lesson-content/:lessonId", requireLectureOrAdmin, (req, res, next) => {
+router24.get("/lesson-content/:lessonId", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.getLessonContent(req, res, next);
 });
-router23.put("/lesson-content/:lessonId/content", requireLectureOrAdmin, (req, res, next) => {
+router24.put("/lesson-content/:lessonId/content", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.updateLessonContent(req, res, next);
 });
-router23.put("/lesson-content/:lessonId/scoring", requireLectureOrAdmin, (req, res, next) => {
+router24.put("/lesson-content/:lessonId/scoring", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.updateLessonScoring(req, res, next);
 });
-router23.put("/lessons/:lessonId/submit", requireLectureOrAdmin, (req, res, next) => {
+router24.put("/lessons/:lessonId/submit", requireLectureOrAdmin, (req, res, next) => {
   lecture_controller_default.submitLesson(req, res, next);
 });
-var lecture_routes_default = router23;
+var lecture_routes_default = router24;
 
 // src/modules/lessonRequest/routes/lessonRequest.routes.ts
-var import_express24 = require("express");
+var import_express25 = require("express");
 
 // src/modules/lessonRequest/repositories/lessonRequest.repository.ts
 var import_client30 = require("@prisma/client");
@@ -14101,21 +14303,21 @@ var LessonRequestController = class extends BaseController {
 var lessonRequest_controller_default = new LessonRequestController();
 
 // src/modules/lessonRequest/routes/lessonRequest.routes.ts
-var router24 = (0, import_express24.Router)();
-router24.post("/", verifyToken, requireAdmin, lessonRequest_controller_default.create);
-router24.get("/", verifyToken, requireAdmin, lessonRequest_controller_default.getAll);
-router24.get("/:id", verifyToken, requireAdmin, lessonRequest_controller_default.getById);
-router24.put("/:id", verifyToken, requireAdmin, lessonRequest_controller_default.update);
-router24.delete("/:id", verifyToken, requireAdmin, lessonRequest_controller_default.delete);
-router24.get("/lecture/my-requests", verifyToken, lessonRequest_controller_default.getMyRequests);
-router24.get("/lecture/pending", verifyToken, lessonRequest_controller_default.getPendingForMe);
-router24.put("/:id/start", verifyToken, lessonRequest_controller_default.startWorking);
-router24.put("/:id/submit", verifyToken, lessonRequest_controller_default.submitForReview);
-router24.put("/:id/cancel", verifyToken, lessonRequest_controller_default.cancel);
-var lessonRequest_routes_default = router24;
+var router25 = (0, import_express25.Router)();
+router25.post("/", verifyToken, requireAdmin, lessonRequest_controller_default.create);
+router25.get("/", verifyToken, requireAdmin, lessonRequest_controller_default.getAll);
+router25.get("/:id", verifyToken, requireAdmin, lessonRequest_controller_default.getById);
+router25.put("/:id", verifyToken, requireAdmin, lessonRequest_controller_default.update);
+router25.delete("/:id", verifyToken, requireAdmin, lessonRequest_controller_default.delete);
+router25.get("/lecture/my-requests", verifyToken, lessonRequest_controller_default.getMyRequests);
+router25.get("/lecture/pending", verifyToken, lessonRequest_controller_default.getPendingForMe);
+router25.put("/:id/start", verifyToken, lessonRequest_controller_default.startWorking);
+router25.put("/:id/submit", verifyToken, lessonRequest_controller_default.submitForReview);
+router25.put("/:id/cancel", verifyToken, lessonRequest_controller_default.cancel);
+var lessonRequest_routes_default = router25;
 
 // src/modules/lessonContent/routes/lessonContent.routes.ts
-var import_express25 = require("express");
+var import_express26 = require("express");
 
 // src/modules/lessonContent/controllers/lessonContent.controller.ts
 var LessonContentController = class extends BaseController {
@@ -14182,16 +14384,16 @@ var LessonContentController = class extends BaseController {
 var lessonContent_controller_default = new LessonContentController();
 
 // src/modules/lessonContent/routes/lessonContent.routes.ts
-var router25 = (0, import_express25.Router)();
-router25.use(verifyToken);
-router25.get("/:lessonId", lessonContent_controller_default.getByLessonId);
-router25.put("/:lessonId/content", requireLectureOrAdmin, lessonContent_controller_default.updateContent);
-router25.get("/:lessonId/scoring", lessonContent_controller_default.getScoringConfig);
-router25.put("/:lessonId/scoring", requireLectureOrAdmin, lessonContent_controller_default.updateScoringConfig);
-var lessonContent_routes_default = router25;
+var router26 = (0, import_express26.Router)();
+router26.use(verifyToken);
+router26.get("/:lessonId", lessonContent_controller_default.getByLessonId);
+router26.put("/:lessonId/content", requireLectureOrAdmin, lessonContent_controller_default.updateContent);
+router26.get("/:lessonId/scoring", lessonContent_controller_default.getScoringConfig);
+router26.put("/:lessonId/scoring", requireLectureOrAdmin, lessonContent_controller_default.updateScoringConfig);
+var lessonContent_routes_default = router26;
 
 // src/modules/lessonReview/routes/lessonReview.routes.ts
-var import_express26 = require("express");
+var import_express27 = require("express");
 
 // src/modules/lessonReview/repositories/lessonReview.repository.ts
 var import_client31 = require("@prisma/client");
@@ -14799,21 +15001,21 @@ var LessonReviewController = class extends BaseController {
 var lessonReview_controller_default = new LessonReviewController();
 
 // src/modules/lessonReview/routes/lessonReview.routes.ts
-var router26 = (0, import_express26.Router)();
-router26.use(verifyToken);
-router26.use(requireAdmin);
-router26.get("/pending", lessonReview_controller_default.getPendingReviews);
-router26.get("/", lessonReview_controller_default.getAllReviews);
-router26.get("/:lessonId", lessonReview_controller_default.getReviewDetails);
-router26.put("/:lessonId/approve", lessonReview_controller_default.approve);
-router26.put("/:lessonId/reject", lessonReview_controller_default.reject);
-router26.put("/:lessonId/publish", lessonReview_controller_default.publish);
-router26.put("/batch/approve", lessonReview_controller_default.batchApprove);
-router26.put("/batch/publish", lessonReview_controller_default.batchPublish);
-var lessonReview_routes_default = router26;
+var router27 = (0, import_express27.Router)();
+router27.use(verifyToken);
+router27.use(requireAdmin);
+router27.get("/pending", lessonReview_controller_default.getPendingReviews);
+router27.get("/", lessonReview_controller_default.getAllReviews);
+router27.get("/:lessonId", lessonReview_controller_default.getReviewDetails);
+router27.put("/:lessonId/approve", lessonReview_controller_default.approve);
+router27.put("/:lessonId/reject", lessonReview_controller_default.reject);
+router27.put("/:lessonId/publish", lessonReview_controller_default.publish);
+router27.put("/batch/approve", lessonReview_controller_default.batchApprove);
+router27.put("/batch/publish", lessonReview_controller_default.batchPublish);
+var lessonReview_routes_default = router27;
 
 // src/modules/scoring/routes/scoring.routes.ts
-var import_express27 = require("express");
+var import_express28 = require("express");
 
 // src/modules/scoring/controllers/scoring.controller.ts
 var ScoringController = class extends BaseController {
@@ -14892,16 +15094,16 @@ var ScoringController = class extends BaseController {
 var scoring_controller_default = new ScoringController();
 
 // src/modules/scoring/routes/scoring.routes.ts
-var router27 = (0, import_express27.Router)();
-router27.use(verifyToken);
-router27.post("/run", scoring_controller_default.run);
-router27.post("/submit", scoring_controller_default.submit);
-router27.get("/submissions/:lessonId", scoring_controller_default.getMySubmissions);
-router27.get("/submission/:submissionId", scoring_controller_default.getSubmissionDetails);
-var scoring_routes_default = router27;
+var router28 = (0, import_express28.Router)();
+router28.use(verifyToken);
+router28.post("/run", scoring_controller_default.run);
+router28.post("/submit", scoring_controller_default.submit);
+router28.get("/submissions/:lessonId", scoring_controller_default.getMySubmissions);
+router28.get("/submission/:submissionId", scoring_controller_default.getSubmissionDetails);
+var scoring_routes_default = router28;
 
 // src/modules/courseAccess/courseAccess.routes.ts
-var import_express28 = require("express");
+var import_express29 = require("express");
 
 // src/modules/courseAccess/courseAccess.service.ts
 var CODE_PREFIX = "CFE-";
@@ -15630,47 +15832,47 @@ var CourseAccessController = class extends BaseController {
 var courseAccess_controller_default = new CourseAccessController();
 
 // src/modules/courseAccess/courseAccess.routes.ts
-var router28 = (0, import_express28.Router)();
-router28.post("/:courseId/codes", verifyToken, requireAdmin, (req, res, next) => {
+var router29 = (0, import_express29.Router)();
+router29.post("/:courseId/codes", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.createCode(req, res, next);
 });
-router28.post("/:courseId/codes/bulk", verifyToken, requireAdmin, (req, res, next) => {
+router29.post("/:courseId/codes/bulk", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.createBulkCodes(req, res, next);
 });
-router28.post("/:courseId/grant", verifyToken, requireAdmin, (req, res, next) => {
+router29.post("/:courseId/grant", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.grantAccess(req, res, next);
 });
-router28.post("/:courseId/assign-users", verifyToken, requireAdmin, (req, res, next) => {
+router29.post("/:courseId/assign-users", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.assignToUsers(req, res, next);
 });
-router28.get("/:courseId/users/not-enrolled", verifyToken, requireAdmin, (req, res, next) => {
+router29.get("/:courseId/users/not-enrolled", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.getUsersNotEnrolled(req, res, next);
 });
-router28.post("/activate", verifyToken, (req, res, next) => {
+router29.post("/activate", verifyToken, (req, res, next) => {
   courseAccess_controller_default.activateByCode(req, res, next);
 });
-router28.get("/activate/:code", (req, res, next) => {
+router29.get("/activate/:code", (req, res, next) => {
   courseAccess_controller_default.validateCodeLink(req, res, next);
 });
-router28.get("/:courseId/codes", verifyToken, requireAdmin, (req, res, next) => {
+router29.get("/:courseId/codes", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.getCodes(req, res, next);
 });
-router28.delete("/codes/:codeId", verifyToken, requireAdmin, (req, res, next) => {
+router29.delete("/codes/:codeId", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.deleteCode(req, res, next);
 });
-router28.get("/:courseId/enrollments", verifyToken, requireAdmin, (req, res, next) => {
+router29.get("/:courseId/enrollments", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.getEnrollments(req, res, next);
 });
-router28.put("/:courseId/enrollments/:userId/unlock", verifyToken, requireAdmin, (req, res, next) => {
+router29.put("/:courseId/enrollments/:userId/unlock", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.updateUserUnlocks(req, res, next);
 });
-router28.post("/:courseId/enrollments/:userId/unlock-all", verifyToken, requireAdmin, (req, res, next) => {
+router29.post("/:courseId/enrollments/:userId/unlock-all", verifyToken, requireAdmin, (req, res, next) => {
   courseAccess_controller_default.unlockAllLessons(req, res, next);
 });
-var courseAccess_routes_default = router28;
+var courseAccess_routes_default = router29;
 
 // src/modules/ai/routes/ai.routes.ts
-var import_express29 = require("express");
+var import_express30 = require("express");
 
 // src/services/ai.service.ts
 var AIService = class {
@@ -16247,17 +16449,17 @@ var AIController = class {
 var ai_controller_default = new AIController();
 
 // src/modules/ai/routes/ai.routes.ts
-var router29 = (0, import_express29.Router)();
-router29.use(verifyToken);
-router29.get("/conversations", ai_controller_default.getConversations);
-router29.get("/conversations/:id", ai_controller_default.getConversation);
-router29.post("/conversations", ai_controller_default.createConversation);
-router29.put("/conversations/:id", ai_controller_default.updateConversation);
-router29.delete("/conversations/:id", ai_controller_default.deleteConversation);
-router29.post("/conversations/:id/messages", ai_controller_default.sendMessage);
-router29.post("/generate-hints", requireLectureOrAdmin, ai_controller_default.generateHints);
-router29.post("/chat", ai_controller_default.chat);
-var ai_routes_default = router29;
+var router30 = (0, import_express30.Router)();
+router30.use(verifyToken);
+router30.get("/conversations", ai_controller_default.getConversations);
+router30.get("/conversations/:id", ai_controller_default.getConversation);
+router30.post("/conversations", ai_controller_default.createConversation);
+router30.put("/conversations/:id", ai_controller_default.updateConversation);
+router30.delete("/conversations/:id", ai_controller_default.deleteConversation);
+router30.post("/conversations/:id/messages", ai_controller_default.sendMessage);
+router30.post("/generate-hints", requireLectureOrAdmin, ai_controller_default.generateHints);
+router30.post("/chat", ai_controller_default.chat);
+var ai_routes_default = router30;
 
 // server.ts
 var envPath = import_path.default.join(process.cwd(), ".env");
@@ -16281,7 +16483,7 @@ console.log("[DEBUG] PAYOS_CLIENT_ID:", process.env.PAYOS_CLIENT_ID ? `${process
 console.log("[DEBUG] PAYOS_API_KEY:", process.env.PAYOS_API_KEY ? `${process.env.PAYOS_API_KEY.substring(0, 8)}...` : "NOT SET");
 console.log("[DEBUG] PAYOS_CHECKSUM_KEY:", process.env.PAYOS_CHECKSUM_KEY ? `${process.env.PAYOS_CHECKSUM_KEY.substring(0, 8)}...` : "NOT SET");
 console.log("[DEBUG] FRONTEND_URL:", process.env.FRONTEND_URL || "NOT SET");
-var app = (0, import_express30.default)();
+var app = (0, import_express31.default)();
 app.use((0, import_cors.default)({
   origin: [
     "http://localhost:5173",
@@ -16294,8 +16496,8 @@ app.use((0, import_cors.default)({
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-app.use(import_express30.default.json({ limit: "50mb" }));
-app.use(import_express30.default.urlencoded({ limit: "50mb", extended: true }));
+app.use(import_express31.default.json({ limit: "50mb" }));
+app.use(import_express31.default.urlencoded({ limit: "50mb", extended: true }));
 app.get("/", (req, res) => {
   res.send("CodeFit API running");
 });

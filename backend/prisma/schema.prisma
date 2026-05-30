@@ -231,6 +231,7 @@ model Course {
   // Course metadata managed by admin
   features String?  @db.LongText  // JSON array of { title, description, bgColor, textColor }
   includes String? @db.LongText  // JSON array of { icon, text }
+  isFreeCourse  Boolean @default(false)  // true = khóa học miễn phí (banner hiển thị)
   createdAt   DateTime @default(now())
 
   creator      User?        @relation("CourseCreator", fields: [creatorId], references: [id])

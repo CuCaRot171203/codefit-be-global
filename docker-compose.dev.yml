@@ -36,6 +36,10 @@ services:
       PAYOS_CLIENT_ID: a4707b69-2fbe-4350-9bb7-5fc742840227
       PAYOS_API_KEY: d90cf20f-bd98-4090-b100-1b0334c99bde
       PAYOS_CHECKSUM_KEY: 1539a176ecb10392c4c8ca9744a142ccfa30cd429c4a2cb71f8ecb1b162a0b24
+      # Google OAuth
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-}
     depends_on:
       mysql:
         condition: service_healthy
